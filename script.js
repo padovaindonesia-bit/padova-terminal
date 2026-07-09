@@ -1,15 +1,13 @@
+console.log("script.js loaded");
+
 function showAttendance() {
-
-document.getElementById("home").classList.remove("active");
-
-document.getElementById("attendance").classList.add("active");
-
+    console.log("showAttendance()");
+    document.getElementById("home").classList.remove("active");
+    document.getElementById("attendance").classList.add("active");
 }
 
 function goHome() {
-
-document.getElementById("attendance").classList.remove("active");
-
-document.getElementById("home").classList.add("active");
-
+    console.log("goHome()");
+    document.getElementById("attendance").classList.remove("active");
+    document.getElementById("home").classList.add("active");
 }
