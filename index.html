@@ -1,152 +1,15 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>PADOVA Terminal</title>
 
-<style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,sans-serif;
-}
-
-body{
-background:#F7F3EE;
-}
-
-.page{
-display:none;
-min-height:100vh;
-padding:25px;
-justify-content:center;
-align-items:center;
-}
-
-.page.active{
-display:flex;
-}
-
-.container{
-width:100%;
-max-width:650px;
-text-align:center;
-}
-
-.logo{
-width:100%;
-max-width:380px;
-margin:auto;
-display:block;
-margin-bottom:25px;
-}
-
-.tagline{
-margin-bottom:45px;
-font-size:18px;
-line-height:1.6;
-color:#666;
-}
-
-.card{
-
-background:white;
-border-radius:24px;
-padding:34px;
-margin-bottom:22px;
-box-shadow:0 10px 25px rgba(0,0,0,.08);
-cursor:pointer;
-transition:.2s;
-
-}
-
-.card:hover{
-
-transform:translateY(-3px);
-
-}
-
-.activeCard{
-
-border:4px solid #EC7A68;
-
-}
-
-.disabled{
-
-opacity:.45;
-pointer-events:none;
-
-}
-
-.icon{
-
-font-size:54px;
-margin-bottom:15px;
-
-}
-
-.title{
-
-font-size:30px;
-font-weight:bold;
-
-}
-
-.subtitle{
-
-margin-top:8px;
-color:#999;
-
-}
-
-.version{
-
-margin-top:30px;
-color:#999;
-
-font-size:14px;
-
-}
-
-.back{
-
-display:inline-block;
-margin-bottom:35px;
-font-weight:bold;
-cursor:pointer;
-color:#EC7A68;
-font-size:18px;
-
-}
-
-h1{
-
-margin-bottom:30px;
-
-}
-
-#camera{
-
-width:100%;
-
-height:380px;
-
-background:black;
-
-border-radius:24px;
-
-object-fit:cover;
-
-margin-top:30px;
-
-}
-
-</style>
+<link rel="stylesheet" href="style.css">
 
 </head>
 
@@ -161,21 +24,15 @@ margin-top:30px;
 <div class="tagline">
 
 Comfort You Can Trust.<br>
-
 Quality You Can Feel.
 
 </div>
 
-<div class="card activeCard"
-onclick="showAttendance()">
+<div class="card activeCard" onclick="showAttendance()">
 
 <div class="icon">🕒</div>
 
-<div class="title">
-
-Absensi
-
-</div>
+<div class="title">Absensi</div>
 
 </div>
 
@@ -211,7 +68,7 @@ Absensi
 
 <div class="version">
 
-PADOVA Terminal Alpha
+PADOVA Terminal v0.1
 
 </div>
 
@@ -223,9 +80,7 @@ PADOVA Terminal Alpha
 
 <div class="container">
 
-<div class="back"
-
-onclick="goHome()">
+<div class="back" onclick="goHome()">
 
 ← Kembali
 
@@ -233,85 +88,19 @@ onclick="goHome()">
 
 <h1>ABSENSI</h1>
 
-<p>
+<p>Silakan scan kartu karyawan kamu.</p>
 
-Silakan scan kartu karyawan kamu.
+<div class="cameraPlaceholder">
 
-</p>
-
-<video
-id="camera"
-autoplay
-playsinline
-muted>
-
-</video>
+📷
 
 </div>
 
 </div>
 
-<script>
+</div>
 
-function showAttendance(){
-
-document.getElementById("home").classList.remove("active");
-
-document.getElementById("attendance").classList.add("active");
-
-}
-
-function goHome(){
-
-document.getElementById("attendance").classList.remove("active");
-
-document.getElementById("home").classList.add("active");
-
-}
-
-async function showAttendance(){
-
-document.getElementById("home").classList.remove("active");
-
-document.getElementById("attendance").classList.add("active");
-
-try{
-
-const stream=await navigator.mediaDevices.getUserMedia({
-
-video:{
-facingMode:"environment"
-},
-
-audio:false
-
-});
-
-window.cameraStream=stream;
-
-document.getElementById("camera").srcObject=stream;
-
-}catch(e){
-
-alert("Camera tidak dapat diakses.");
-
-}
-
-}
-
-function goHome(){
-
-if(window.cameraStream){
-
-window.cameraStream.getTracks().forEach(track=>track.stop());
-
-}
-
-document.getElementById("attendance").classList.remove("active");
-
-document.getElementById("home").classList.add("active");
-
-}
+<script src="script.js"></script>
 
 </body>
 
