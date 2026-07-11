@@ -1,117 +1,192 @@
 <!DOCTYPE html>
 <html lang="id">
 
+
 <head>
+
 
 <meta charset="UTF-8">
 
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 
 <title>PADOVA Terminal</title>
 
+
 <link rel="stylesheet" href="style.css">
+
 
 </head>
 
+
 <body>
+
 
 <div id="home" class="page active">
 
+
 <div class="container">
+
 
 <img src="Logo%20Primary.png" class="logo">
 
+
 <div class="tagline">
+
 
 Comfort You Can Trust.<br>
 Quality You Can Feel.
 
+
 </div>
+
 
 <div class="card activeCard" onclick="showAttendance()">
 
+
 <div class="icon">🕒</div>
+
 
 <div class="title">Absensi</div>
 
+
 </div>
+
 
 <div class="card disabled">
 
+
 <div class="icon">📦</div>
+
 
 <div class="title">Stock</div>
 
+
 <div class="subtitle">Segera Hadir</div>
+
 
 </div>
 
+
 <div class="card disabled">
+
 
 <div class="icon">🏭</div>
 
+
 <div class="title">Produksi</div>
+
 
 <div class="subtitle">Segera Hadir</div>
 
+
 </div>
+
 
 <div class="card disabled">
 
+
 <div class="icon">📦</div>
+
 
 <div class="title">Packing</div>
 
+
 <div class="subtitle">Segera Hadir</div>
 
+
 </div>
+
 
 <div class="version">
 
+
 PADOVA Terminal v0.1
 
-</div>
 
 </div>
 
+
 </div>
+
+
+</div>
+
 
 <div id="attendance" class="page">
 
+
 <div class="container">
+
 
 <div class="back" onclick="goHome()">
 
+
 ← Kembali
 
+
 </div>
+
 
 <h1>ABSENSI</h1>
 
+
 <p class="instruction">
+
 
 Scan kartu karyawan kamu untuk memulai absensi.
 
+
 </p>
+
 
 <p class="hint">
 
+
 📸 Setelah scan, tetap diam beberapa detik agar kamera mengambil foto.
+
 
 </p>
 
-<div class="cameraPlaceholder">
+
+<div class="cameraBox">
+
+
+<video id="cameraPreview" class="cameraPreview" autoplay muted playsinline></video>
+
+
+<div id="cameraFallback" class="cameraFallback">
+
 
 📷
 
-</div>
 
 </div>
 
+
 </div>
+
+
+<p id="cameraStatus" class="cameraStatus">
+
+
+Kamera belum aktif.
+
+
+</p>
+
+
+</div>
+
+
+</div>
+
 
 <script src="script.js"></script>
 
+
 </body>
+
 
 </html>
