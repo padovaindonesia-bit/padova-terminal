@@ -132,7 +132,7 @@ PADOVA Terminal v0.1
 <h1>ABSENSI</h1>
 
 
-<p class="instruction">
+<p id="attendanceInstruction" class="instruction">
 
 
 Scan kartu karyawan kamu untuk memulai absensi.
@@ -141,7 +141,7 @@ Scan kartu karyawan kamu untuk memulai absensi.
 </p>
 
 
-<p class="hint">
+<p id="attendanceHint" class="hint">
 
 
 📸 Setelah scan, tetap diam beberapa detik agar kamera mengambil foto.
@@ -150,10 +150,13 @@ Scan kartu karyawan kamu untuk memulai absensi.
 </p>
 
 
-<div class="cameraBox">
+<div id="cameraBox" class="cameraBox">
 
 
 <video id="cameraPreview" class="cameraPreview" autoplay muted playsinline></video>
+
+
+<div id="countdownOverlay" class="countdownOverlay" hidden>3...</div>
 
 
 <div id="cameraFallback" class="cameraFallback">
@@ -163,6 +166,9 @@ Scan kartu karyawan kamu untuk memulai absensi.
 
 
 </div>
+
+
+<canvas id="selfieCanvas" hidden></canvas>
 
 
 </div>
@@ -177,6 +183,21 @@ Kamera belum aktif.
 </p>
 
 
+<div id="workflowPanel" class="workflowPanel" hidden>
+
+
+<div id="workflowName" class="workflowName"></div>
+
+
+<div id="workflowTitle" class="workflowTitle"></div>
+
+
+<p id="workflowText" class="workflowText"></p>
+
+
+</div>
+
+
 <div id="qrResult" class="qrResult" hidden>
 
 
@@ -184,6 +205,21 @@ Kamera belum aktif.
 
 
 <div id="qrEmployeeId" class="qrEmployeeId">-</div>
+
+
+<div class="attendanceActionBlock">
+
+
+<div class="qrLabel">Status absensi</div>
+
+
+<div id="attendanceAction" class="attendanceAction">-</div>
+
+
+<div id="attendanceNote" class="attendanceNote">-</div>
+
+
+</div>
 
 
 </div>
