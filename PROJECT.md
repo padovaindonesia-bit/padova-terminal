@@ -398,3 +398,15 @@ When providing code:
 Always build incrementally.
 
 This is a production application, not a coding exercise.
+# Product Owner Notes
+
+The product owner values:
+
+- Simplicity over cleverness.
+- Reliability over new features.
+- Fool-proof workflows over flexibility.
+- Long-term maintainability.
+- Minimal operational cost.
+- Google ecosystem integration.
+
+When multiple technical solutions exist, prefer the solution that requires the least training for factory staff and the least maintenance for the owner.
