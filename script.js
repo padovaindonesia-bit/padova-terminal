@@ -1,5 +1,11 @@
+const EXPECTED_EMPLOYEE_ID = "PDV-S001";
+
+
 let cameraStream = null;
 let attendanceIsOpen = false;
+let qrDetector = null;
+let qrScanTimeoutId = null;
+let qrScanPaused = false;
 
 
 function showAttendance() {
@@ -8,6 +14,7 @@ function showAttendance() {
     attendanceIsOpen = true;
     document.getElementById("home").classList.remove("active");
     document.getElementById("attendance").classList.add("active");
+    resetQrResult();
     startCamera();
 
 
@@ -74,7 +81,8 @@ async function startCamera() {
         await cameraPreview.play();
         cameraPreview.classList.add("active");
         cameraFallback.classList.add("hidden");
-        updateCameraStatus("Kamera siap. Tunjukkan kartu karyawan kamu ke kamera.");
+        updateCameraStatus("Kamera siap. Arahkan QR kartu karyawan kamu ke kamera.");
+        startQrScanner();
     } catch (error) {
         if (cameraStream) {
             cameraStream.getTracks().forEach(function(track) {
@@ -101,6 +109,9 @@ function stopCamera() {
     const cameraFallback = document.getElementById("cameraFallback");
 
 
+    stopQrScanner();
+
+
     if (cameraStream) {
         cameraStream.getTracks().forEach(function(track) {
             track.stop();
@@ -113,6 +124,136 @@ function stopCamera() {
     cameraPreview.classList.remove("active");
     cameraFallback.classList.remove("hidden");
     updateCameraStatus("Kamera belum aktif.");
+
+
+}
+
+
+function startQrScanner() {
+
+
+    if (!("BarcodeDetector" in window)) {
+        updateCameraStatus("Kamera siap, tapi scanner QR belum tersedia. Coba update Chrome di tablet ini.", true);
+        return;
+    }
+
+
+    try {
+        if (!qrDetector) {
+            qrDetector = new BarcodeDetector({ formats: ["qr_code"] });
+        }
+    } catch (error) {
+        updateCameraStatus("Scanner QR belum bisa disiapkan di browser ini.", true);
+        return;
+    }
+
+
+    qrScanPaused = false;
+    scheduleQrScan();
+
+
+}
+
+
+function scheduleQrScan() {
+
+
+    if (!attendanceIsOpen || !cameraStream || qrScanPaused) {
+        return;
+    }
+
+
+    clearQrScanTimer();
+    qrScanTimeoutId = window.setTimeout(scanQrCode, 500);
+
+
+}
+
+
+async function scanQrCode() {
+
+
+    const cameraPreview = document.getElementById("cameraPreview");
+
+
+    if (!attendanceIsOpen || !cameraStream || qrScanPaused) {
+        return;
+    }
+
+
+    if (cameraPreview.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        scheduleQrScan();
+        return;
+    }
+
+
+    try {
+        const barcodes = await qrDetector.detect(cameraPreview);
+
+
+        if (barcodes.length > 0) {
+            handleQrCode(barcodes[0].rawValue.trim());
+            return;
+        }
+    } catch (error) {
+        updateCameraStatus("Scanner QR sedang mencoba membaca kartu kamu...");
+    }
+
+
+    scheduleQrScan();
+
+
+}
+
+
+function handleQrCode(qrValue) {
+
+
+    if (qrValue === EXPECTED_EMPLOYEE_ID) {
+        qrScanPaused = true;
+        clearQrScanTimer();
+        document.getElementById("qrEmployeeId").textContent = qrValue;
+        document.getElementById("qrResult").hidden = false;
+        updateCameraStatus("QR berhasil terbaca. ID karyawan cocok.");
+        return;
+    }
+
+
+    updateCameraStatus("QR belum cocok. Untuk tes ini gunakan kartu PDV-S001.", true);
+    scheduleQrScan();
+
+
+}
+
+
+function stopQrScanner() {
+
+
+    qrScanPaused = true;
+    clearQrScanTimer();
+
+
+}
+
+
+function clearQrScanTimer() {
+
+
+    if (qrScanTimeoutId) {
+        window.clearTimeout(qrScanTimeoutId);
+        qrScanTimeoutId = null;
+    }
+
+
+}
+
+
+function resetQrResult() {
+
+
+    qrScanPaused = false;
+    document.getElementById("qrEmployeeId").textContent = "-";
+    document.getElementById("qrResult").hidden = true;
 
 
 }
