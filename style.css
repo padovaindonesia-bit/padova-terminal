@@ -5,9 +5,11 @@ box-sizing:border-box;
 font-family:Arial,sans-serif;
 }
 
+
 body{
 background:#F7F3EE;
 }
+
 
 .page{
 display:none;
@@ -17,9 +19,11 @@ justify-content:center;
 align-items:center;
 }
 
+
 .page.active{
 display:flex;
 }
+
 
 .container{
 width:100%;
@@ -28,6 +32,7 @@ margin:auto;
 text-align:center;
 }
 
+
 .logo{
 display:block;
 width:100%;
@@ -35,12 +40,14 @@ max-width:380px;
 margin:0 auto 25px;
 }
 
+
 .tagline{
 margin-bottom:45px;
 font-size:18px;
 line-height:1.6;
 color:#666;
 }
+
 
 .card{
 background:#fff;
@@ -52,23 +59,28 @@ cursor:pointer;
 transition:.2s;
 }
 
+
 .card:hover{
 transform:translateY(-3px);
 }
 
+
 .activeCard{
 border:4px solid #EC7A68;
 }
+
 
 .disabled{
 opacity:.45;
 pointer-events:none;
 }
 
+
 .icon{
 font-size:54px;
 margin-bottom:15px;
 }
+
 
 .title{
 font-size:30px;
@@ -76,16 +88,19 @@ font-weight:bold;
 color:#444;
 }
 
+
 .subtitle{
 margin-top:8px;
 color:#999;
 }
+
 
 .version{
 margin-top:35px;
 font-size:14px;
 color:#999;
 }
+
 
 .back{
 display:inline-block;
@@ -96,49 +111,109 @@ color:#EC7A68;
 cursor:pointer;
 }
 
+
 h1{
 margin-bottom:30px;
 color:#444;
 }
+
 
 p{
 font-size:20px;
 color:#666;
 }
 
-.cameraPlaceholder{
+
+.cameraBox{
 margin-top:35px;
 height:380px;
-border:4px dashed #EC7A68;
+border:4px solid #EC7A68;
 border-radius:24px;
+position:relative;
+overflow:hidden;
+display:flex;
+justify-content:center;
+align-items:center;
+background:#fff;
+}
+
+
+.cameraPreview{
+width:100%;
+height:100%;
+object-fit:cover;
+display:none;
+background:#222;
+}
+
+
+.cameraPreview.active{
+display:block;
+}
+
+
+.cameraFallback{
+position:absolute;
+inset:0;
 display:flex;
 justify-content:center;
 align-items:center;
 font-size:90px;
 background:#fff;
 }
+
+
+.cameraFallback.hidden{
+display:none;
+}
+
+
+.cameraStatus{
+margin-top:18px;
+font-size:17px;
+color:#888;
+line-height:1.6;
+}
+
+
+.cameraStatus.error{
+color:#EC7A68;
+font-weight:bold;
+}
 .instruction{
+
 
 margin-top:15px;
 
+
 font-size:24px;
+
 
 font-weight:bold;
 
+
 color:#444;
+
 
 line-height:1.5;
 
+
 }
+
 
 .hint{
 
+
 margin-top:18px;
+
 
 font-size:17px;
 
+
 color:#888;
 
+
 line-height:1.6;
+
 
 }
