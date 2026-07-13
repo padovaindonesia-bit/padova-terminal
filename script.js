@@ -1,7 +1,30 @@
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzsokY6xm7sLYbTlzderL3BNLexV1PsBNL6i729DPluIjKcBnKVzDyDaAyqrYTONR2M/exec";
+
+
 const STAFF_MEMBERS = {
     "PDV-S001": {
         id: "PDV-S001",
-        name: "PDV-S001"
+        name: "OLE"
+    },
+    "PDV-S002": {
+        id: "PDV-S002",
+        name: "OTOI"
+    },
+    "PDV-S003": {
+        id: "PDV-S003",
+        name: "MARWAN"
+    },
+    "PDV-S004": {
+        id: "PDV-S004",
+        name: "BAKOS"
+    },
+    "PDV-S005": {
+        id: "PDV-S005",
+        name: "TETIM"
+    },
+    "PDV-S006": {
+        id: "PDV-S006",
+        name: "SANTUNG"
     }
 };
 
@@ -12,6 +35,7 @@ const DUPLICATE_SCAN_DELAY_MS = 1500;
 const TRANSITION_DELAY_MS = 1000;
 const COUNTDOWN_DELAY_MS = 1000;
 const SUCCESS_RETURN_DELAY_MS = 3000;
+const SHEETS_REQUEST_TIMEOUT_MS = 10000;
 
 
 let cameraStream = null;
@@ -257,13 +281,13 @@ async function scanQrCode() {
 }
 
 
-function handleQrCode(qrValue) {
+async function handleQrCode(qrValue) {
 
 
-    const staff = STAFF_MEMBERS[qrValue];
+    const localStaff = STAFF_MEMBERS[qrValue];
 
 
-    if (!staff) {
+    if (!localStaff) {
         updateCameraStatus("QR tidak valid. Gunakan kartu karyawan PADOVA.", true);
         scheduleQrScan();
         return;
@@ -273,20 +297,32 @@ function handleQrCode(qrValue) {
     workflowInProgress = true;
     qrScanPaused = true;
     stopQrScanner();
+    updateCameraStatus("Memeriksa data absensi...");
 
 
-    const attendanceStatus = getAttendanceStatus(staff.id);
+    try {
+        const attendanceDecision = await getAttendanceDecision(localStaff);
 
 
-    if (attendanceStatus === "complete") {
-        stopCamera();
-        showAttendanceComplete(staff);
-        scheduleReturnHome();
-        return;
+        if (!isCurrentWorkflow(workflowRunId)) {
+            return;
+        }
+
+
+        if (attendanceDecision.status === "complete") {
+            stopCamera();
+            showAttendanceComplete(attendanceDecision.staff);
+            scheduleReturnHome();
+            return;
+        }
+
+
+        runSelfieWorkflow(attendanceDecision.staff, attendanceDecision.status);
+    } catch (error) {
+        workflowInProgress = false;
+        updateCameraStatus("Data absensi belum bisa dicek. Coba scan ulang.", true);
+        startQrScanner();
     }
-
-
-    runSelfieWorkflow(staff, attendanceStatus);
 
 
 }
@@ -329,7 +365,7 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
 
 
         const selfieDataUrl = captureSelfie();
-        const saveResult = saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl);
+        const saveResult = await saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl);
 
 
         if (!saveResult.saved) {
@@ -642,7 +678,41 @@ function clearAutoReturnTimer() {
 }
 
 
-function getAttendanceStatus(employeeId) {
+async function getAttendanceDecision(localStaff) {
+
+
+    if (!isGoogleSheetsConfigured()) {
+        return {
+            staff: localStaff,
+            status: getLocalAttendanceStatus(localStaff.id)
+        };
+    }
+
+
+    const response = await callGoogleSheets({
+        action: "status",
+        staffId: localStaff.id
+    });
+
+
+    if (!response.ok) {
+        throw new Error(response.message || "Attendance status failed.");
+    }
+
+
+    return {
+        staff: {
+            id: response.staff.id,
+            name: response.staff.name
+        },
+        status: response.nextStatus
+    };
+
+
+}
+
+
+function getLocalAttendanceStatus(employeeId) {
 
 
     const todayKey = getTodayKey();
@@ -666,12 +736,37 @@ function getAttendanceStatus(employeeId) {
 }
 
 
-function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
+async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
 
 
     if (!selfieDataUrl) {
         return { saved: false };
     }
+
+
+    if (isGoogleSheetsConfigured()) {
+        const response = await callGoogleSheets({
+            action: "record",
+            staffId: staff.id,
+            status: attendanceStatus,
+            buktiAbsen: "Y",
+            device: getDeviceLabel()
+        });
+
+
+        if (!response.ok) {
+            return { saved: false };
+        }
+    }
+
+
+    return saveLocalAttendanceRecord(staff, attendanceStatus);
+
+
+}
+
+
+function saveLocalAttendanceRecord(staff, attendanceStatus) {
 
 
     const todayKey = getTodayKey();
@@ -715,6 +810,67 @@ function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
 
 
     return saveAttendanceDrafts(attendanceDrafts);
+
+
+}
+
+
+function callGoogleSheets(params) {
+
+
+    return new Promise(function(resolve, reject) {
+        const callbackName = "padovaSheetsCallback" + Date.now() + Math.floor(Math.random() * 10000);
+        const script = document.createElement("script");
+        const timeoutId = window.setTimeout(function() {
+            cleanup();
+            reject(new Error("Google Sheets request timed out."));
+        }, SHEETS_REQUEST_TIMEOUT_MS);
+
+
+        function cleanup() {
+            window.clearTimeout(timeoutId);
+            delete window[callbackName];
+
+
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        }
+
+
+        window[callbackName] = function(response) {
+            cleanup();
+            resolve(response);
+        };
+
+
+        const searchParams = new URLSearchParams(params);
+        searchParams.set("callback", callbackName);
+        script.src = GOOGLE_APPS_SCRIPT_URL + "?" + searchParams.toString();
+        script.onerror = function() {
+            cleanup();
+            reject(new Error("Google Sheets request failed."));
+        };
+        document.body.appendChild(script);
+    });
+
+
+}
+
+
+function isGoogleSheetsConfigured() {
+
+
+    return GOOGLE_APPS_SCRIPT_URL.indexOf("https://script.google.com/") === 0;
+
+
+}
+
+
+function getDeviceLabel() {
+
+
+    return "PADOVA Terminal";
 
 
 }
