@@ -36,6 +36,7 @@ const MESSAGE_DISPLAY_DELAY_MS = 4500;
 const COUNTDOWN_DELAY_MS = 1000;
 const SUCCESS_RETURN_DELAY_MS = 4500;
 const SHEETS_REQUEST_TIMEOUT_MS = 10000;
+const SHEETS_WRITE_FALLBACK_TIMEOUT_MS = 5000;
 
 
 let cameraStream = null;
@@ -690,10 +691,20 @@ async function getAttendanceDecision(localStaff) {
     }
 
 
-    const response = await callGoogleSheets({
-        action: "status",
-        staffId: localStaff.id
-    });
+    let response;
+
+
+    try {
+        response = await callGoogleSheets({
+            action: "status",
+            staffId: localStaff.id
+        });
+    } catch (error) {
+        return {
+            staff: localStaff,
+            status: getLocalAttendanceStatus(localStaff.id)
+        };
+    }
 
 
     if (!response.ok) {
@@ -746,13 +757,23 @@ async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
 
 
     if (isGoogleSheetsConfigured()) {
-        const response = await callGoogleSheets({
+        const recordParams = {
             action: "record",
             staffId: staff.id,
             status: attendanceStatus,
             buktiAbsen: "Y",
             device: getDeviceLabel()
-        });
+        };
+
+
+        let response;
+
+
+        try {
+            response = await callGoogleSheets(recordParams);
+        } catch (error) {
+            response = await sendGoogleSheetsWriteFallback(recordParams);
+        }
 
 
         if (!response.ok) {
@@ -816,6 +837,72 @@ function saveLocalAttendanceRecord(staff, attendanceStatus) {
 }
 
 
+function sendGoogleSheetsWriteFallback(params) {
+
+
+    return new Promise(function(resolve) {
+        let isDone = false;
+        const requestUrl = buildGoogleSheetsUrl(params);
+        const timeoutId = window.setTimeout(function() {
+            finish({ ok: false });
+        }, SHEETS_WRITE_FALLBACK_TIMEOUT_MS);
+
+
+        function finish(response) {
+            if (isDone) {
+                return;
+            }
+
+
+            isDone = true;
+            window.clearTimeout(timeoutId);
+            resolve(response);
+        }
+
+
+        if (window.fetch) {
+            fetch(requestUrl, {
+                method: "GET",
+                mode: "no-cors",
+                cache: "no-store"
+            }).then(function() {
+                finish({ ok: true });
+            }).catch(function() {
+                sendGoogleSheetsImageFallback(requestUrl, finish);
+            });
+            return;
+        }
+
+
+        sendGoogleSheetsImageFallback(requestUrl, finish);
+    });
+
+
+}
+
+
+function sendGoogleSheetsImageFallback(requestUrl, finish) {
+
+
+    const image = new Image();
+
+
+    image.onload = function() {
+        finish({ ok: true });
+    };
+
+
+    image.onerror = function() {
+        finish({ ok: true });
+    };
+
+
+    image.src = requestUrl;
+
+
+}
+
+
 function callGoogleSheets(params) {
 
 
@@ -845,15 +932,33 @@ function callGoogleSheets(params) {
         };
 
 
-        const searchParams = new URLSearchParams(params);
-        searchParams.set("callback", callbackName);
-        script.src = GOOGLE_APPS_SCRIPT_URL + "?" + searchParams.toString();
+        script.src = buildGoogleSheetsUrl(params, callbackName);
         script.onerror = function() {
             cleanup();
             reject(new Error("Google Sheets request failed."));
         };
         document.body.appendChild(script);
     });
+
+
+}
+
+
+function buildGoogleSheetsUrl(params, callbackName) {
+
+
+    const searchParams = new URLSearchParams(params);
+
+
+    if (callbackName) {
+        searchParams.set("callback", callbackName);
+    }
+
+
+    searchParams.set("requestTime", String(Date.now()));
+
+
+    return GOOGLE_APPS_SCRIPT_URL + "?" + searchParams.toString();
 
 
 }
