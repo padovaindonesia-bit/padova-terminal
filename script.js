@@ -1,4 +1,4 @@
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzsokY6xm7sLYbTlzderL3BNLexV1PsBNL6i729DPluIjKcBnKVzDyDaAyqrYTONR2M/exec";
+const GOOGLE_APPS_SCRIPT_URL = "";
 
 
 const STAFF_MEMBERS = {
@@ -32,9 +32,9 @@ const STAFF_MEMBERS = {
 const ATTENDANCE_STORAGE_KEY = "padovaAttendanceDrafts";
 const QR_SCAN_DELAY_MS = 500;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
-const TRANSITION_DELAY_MS = 1000;
+const MESSAGE_DISPLAY_DELAY_MS = 4500;
 const COUNTDOWN_DELAY_MS = 1000;
-const SUCCESS_RETURN_DELAY_MS = 3000;
+const SUCCESS_RETURN_DELAY_MS = 4500;
 const SHEETS_REQUEST_TIMEOUT_MS = 10000;
 
 
@@ -335,7 +335,8 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
 
 
     showTransitionMessage(staff);
-    await delay(TRANSITION_DELAY_MS);
+    await waitForScreenRender();
+    await delay(MESSAGE_DISPLAY_DELAY_MS);
 
 
     if (!isCurrentWorkflow(currentRunId)) {
@@ -959,6 +960,19 @@ function isCurrentWorkflow(currentRunId) {
 
 
     return attendanceIsOpen && workflowInProgress && workflowRunId === currentRunId;
+
+
+}
+
+
+function waitForScreenRender() {
+
+
+    return new Promise(function(resolve) {
+        window.requestAnimationFrame(function() {
+            window.requestAnimationFrame(resolve);
+        });
+    });
 
 
 }
