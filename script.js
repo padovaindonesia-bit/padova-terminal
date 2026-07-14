@@ -1,4 +1,4 @@
-const GOOGLE_APPS_SCRIPT_URL = "";
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/u/0/home/projects/1zT4BBzCHo9u50Wxg4l7pRkW5dkM9v-_0zMsUiHrOr0efR5gBtWpOMI8C/edit";
 
 
 const STAFF_MEMBERS = {
