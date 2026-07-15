@@ -30,7 +30,22 @@ const STAFF_MEMBERS = {
 };
 
 
+const STOCK_ITEMS = {
+    "BP1W": {
+        sku: "BP1W",
+        name: "Bantal PADOVA (classic - white)",
+        stock: 0
+    },
+    "PDV-BTL-001": {
+        sku: "PDV-BTL-001",
+        name: "BANTAL HOTEL 50x70",
+        stock: 125
+    }
+};
+
+
 const ATTENDANCE_STORAGE_KEY = "padovaAttendanceDrafts";
+const STOCK_STORAGE_KEY = "padovaStockDrafts";
 const QR_SCAN_DELAY_MS = 500;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
 const MESSAGE_DISPLAY_DELAY_MS = 4500;
@@ -53,6 +68,15 @@ let lastQrReadAt = 0;
 let adminLogoTapCount = 0;
 let adminLogoTapTimeoutId = null;
 let generatedQrFileName = "";
+let stockCameraStream = null;
+let stockQrDetector = null;
+let stockScanTimeoutId = null;
+let stockScanPaused = false;
+let stockIsOpen = false;
+let selectedStockItem = null;
+let stockQuantity = 0;
+let stockQuantityHoldIntervalId = null;
+let stockReturnTimeoutId = null;
 
 
 setupAdminPinInput();
@@ -80,8 +104,10 @@ function goHome() {
     workflowInProgress = false;
     workflowRunId += 1;
     clearAutoReturnTimer();
+    clearStockReturnTimer();
     closeAdminPinDialog();
     stopCamera();
+    stopStockCamera();
     showPage("home");
 
 
@@ -97,6 +123,452 @@ function showPage(pageId) {
 
 
     document.getElementById(pageId).classList.add("active");
+
+
+}
+
+
+function showStock() {
+
+
+    stockIsOpen = true;
+    clearStockReturnTimer();
+    stopCamera();
+    showPage("stock");
+    resetStockScreen();
+    startStockCamera();
+
+
+}
+
+
+function resetStockScreen() {
+
+
+    selectedStockItem = null;
+    stockQuantity = 0;
+    stockScanPaused = false;
+    document.getElementById("stockInstruction").hidden = false;
+    document.getElementById("stockCameraBox").hidden = false;
+    document.getElementById("stockStatus").hidden = false;
+    document.getElementById("stockItemPanel").hidden = true;
+    document.getElementById("stockSuccessPanel").hidden = true;
+    document.getElementById("stockQuantityValue").textContent = "0";
+    updateStockStatus("Menyiapkan kamera...");
+
+
+}
+
+
+async function startStockCamera() {
+
+
+    const stockCameraPreview = document.getElementById("stockCameraPreview");
+    const stockCameraFallback = document.getElementById("stockCameraFallback");
+
+
+    if (!window.isSecureContext && location.hostname !== "localhost") {
+        updateStockStatus("Kamera hanya bisa dibuka lewat HTTPS atau localhost.", true);
+        return;
+    }
+
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        updateStockStatus("Browser ini belum bisa membuka kamera.", true);
+        return;
+    }
+
+
+    try {
+        stockCameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+
+
+        if (!stockIsOpen) {
+            stopStockCamera();
+            return;
+        }
+
+
+        stockCameraPreview.srcObject = stockCameraStream;
+        await stockCameraPreview.play();
+        stockCameraPreview.classList.add("active");
+        stockCameraFallback.classList.add("hidden");
+        updateStockStatus("Kamera siap. Scan QR barang.");
+        startStockQrScanner();
+    } catch (error) {
+        stockCameraPreview.srcObject = null;
+        stockCameraPreview.classList.remove("active");
+        stockCameraFallback.classList.remove("hidden");
+        updateStockStatus(getCameraErrorMessage(error), true);
+    }
+
+
+}
+
+
+function stopStockCamera() {
+
+
+    stopStockQrScanner();
+    stopStockQuantityHold();
+    stockIsOpen = false;
+
+
+    if (stockCameraStream) {
+        stockCameraStream.getTracks().forEach(function(track) {
+            track.stop();
+        });
+        stockCameraStream = null;
+    }
+
+
+    const stockCameraPreview = document.getElementById("stockCameraPreview");
+    const stockCameraFallback = document.getElementById("stockCameraFallback");
+
+
+    if (stockCameraPreview && stockCameraFallback) {
+        stockCameraPreview.srcObject = null;
+        stockCameraPreview.classList.remove("active");
+        stockCameraFallback.classList.remove("hidden");
+    }
+
+
+}
+
+
+function startStockQrScanner() {
+
+
+    if (!("BarcodeDetector" in window)) {
+        updateStockStatus("Scanner QR belum tersedia. Coba update browser tablet ini.", true);
+        return;
+    }
+
+
+    try {
+        if (!stockQrDetector) {
+            stockQrDetector = new BarcodeDetector({ formats: ["qr_code"] });
+        }
+    } catch (error) {
+        updateStockStatus("Scanner QR belum bisa disiapkan.", true);
+        return;
+    }
+
+
+    stockScanPaused = false;
+    scheduleStockQrScan();
+
+
+}
+
+
+function scheduleStockQrScan() {
+
+
+    if (!stockIsOpen || !stockCameraStream || stockScanPaused) {
+        return;
+    }
+
+
+    clearStockScanTimer();
+    stockScanTimeoutId = window.setTimeout(scanStockQrCode, QR_SCAN_DELAY_MS);
+
+
+}
+
+
+async function scanStockQrCode() {
+
+
+    const stockCameraPreview = document.getElementById("stockCameraPreview");
+
+
+    if (!stockIsOpen || !stockCameraStream || stockScanPaused) {
+        return;
+    }
+
+
+    if (stockCameraPreview.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        scheduleStockQrScan();
+        return;
+    }
+
+
+    try {
+        const barcodes = await stockQrDetector.detect(stockCameraPreview);
+
+
+        if (barcodes.length > 0) {
+            handleStockQrCode(barcodes[0].rawValue.trim());
+            return;
+        }
+    } catch (error) {
+        updateStockStatus("Scanner QR sedang mencoba membaca barang...");
+    }
+
+
+    scheduleStockQrScan();
+
+
+}
+
+
+function handleStockQrCode(qrValue) {
+
+
+    const item = STOCK_ITEMS[normalizeQrValue(qrValue)];
+
+
+    if (!item) {
+        updateStockStatus("QR tidak dikenali.\nSilakan scan QR barang yang valid.", true);
+        scheduleStockQrScan();
+        return;
+    }
+
+
+    stockScanPaused = true;
+    stopStockQrScanner();
+    selectedStockItem = getStockItemWithCurrentQty(item);
+    showStockItemScreen(selectedStockItem);
+
+
+}
+
+
+function showStockItemScreen(item) {
+
+
+    document.getElementById("stockInstruction").hidden = true;
+    document.getElementById("stockCameraBox").hidden = true;
+    document.getElementById("stockStatus").hidden = false;
+    document.getElementById("stockItemPanel").hidden = false;
+    document.getElementById("stockSuccessPanel").hidden = true;
+    document.getElementById("stockItemName").textContent = item.name;
+    document.getElementById("stockItemSku").textContent = item.sku;
+    document.getElementById("stockCurrentQty").textContent = item.stock + " pcs";
+    setStockQuantity(0);
+    updateStockStatus("");
+
+
+}
+
+
+function startStockQuantityHold(amount) {
+
+
+    changeStockQuantity(amount);
+    stopStockQuantityHold();
+    stockQuantityHoldIntervalId = window.setInterval(function() {
+        changeStockQuantity(amount);
+    }, 180);
+
+
+}
+
+
+function stopStockQuantityHold() {
+
+
+    if (stockQuantityHoldIntervalId) {
+        window.clearInterval(stockQuantityHoldIntervalId);
+        stockQuantityHoldIntervalId = null;
+    }
+
+
+}
+
+
+function changeStockQuantity(amount) {
+
+
+    setStockQuantity(stockQuantity + amount);
+
+
+}
+
+
+function setStockQuantity(quantity) {
+
+
+    stockQuantity = Math.max(0, quantity);
+    document.getElementById("stockQuantityValue").textContent = String(stockQuantity);
+
+
+}
+
+
+async function handleStockAction(actionType) {
+
+
+    if (!selectedStockItem) {
+        updateStockStatus("Scan QR barang terlebih dahulu.", true);
+        return;
+    }
+
+
+    if (stockQuantity <= 0) {
+        updateStockStatus("Pilih jumlah terlebih dahulu.", true);
+        return;
+    }
+
+
+    const result = saveStockMovement(selectedStockItem, actionType, stockQuantity);
+
+
+    if (!result.saved) {
+        updateStockStatus("Stock belum bisa diperbarui. Coba lagi.", true);
+        return;
+    }
+
+
+    selectedStockItem = getStockItemWithCurrentQty(selectedStockItem);
+    showStockSuccess(actionType, stockQuantity);
+
+
+}
+
+
+function saveStockMovement(item, actionType, quantity) {
+
+
+    const stockDrafts = getStockDrafts();
+    const currentStock = getStockItemWithCurrentQty(item).stock;
+    const nextStock = actionType === "masuk" ?
+        currentStock + quantity :
+        Math.max(0, currentStock - quantity);
+
+
+    stockDrafts[item.sku] = {
+        stock: nextStock,
+        updatedAt: new Date().toISOString(),
+        lastMovement: {
+            type: actionType,
+            quantity: quantity
+        }
+    };
+
+
+    try {
+        localStorage.setItem(STOCK_STORAGE_KEY, JSON.stringify(stockDrafts));
+        console.log("Stock movement", {
+            sku: item.sku,
+            name: item.name,
+            type: actionType,
+            quantity: quantity,
+            stockAfter: nextStock
+        });
+        return { saved: true };
+    } catch (error) {
+        return { saved: false };
+    }
+
+
+}
+
+
+function showStockSuccess(actionType, quantity) {
+
+
+    document.getElementById("stockInstruction").hidden = true;
+    document.getElementById("stockCameraBox").hidden = true;
+    document.getElementById("stockStatus").hidden = true;
+    document.getElementById("stockItemPanel").hidden = true;
+    document.getElementById("stockSuccessPanel").hidden = false;
+    document.getElementById("stockSuccessTitle").textContent = "✅ Stock berhasil diperbarui.";
+    document.getElementById("stockSuccessText").textContent = actionType === "masuk" ?
+        quantity + " pcs berhasil ditambahkan." :
+        quantity + " pcs berhasil dikeluarkan.";
+    waitForScreenRender().then(function() {
+        stockReturnTimeoutId = window.setTimeout(function() {
+            if (stockIsOpen) {
+                goHome();
+            }
+        }, SUCCESS_RETURN_DELAY_MS);
+    });
+
+
+}
+
+
+function getStockItemWithCurrentQty(item) {
+
+
+    const stockDrafts = getStockDrafts();
+    const savedStock = stockDrafts[item.sku] && Number(stockDrafts[item.sku].stock);
+
+
+    return {
+        sku: item.sku,
+        name: item.name,
+        stock: Number.isFinite(savedStock) ? savedStock : item.stock
+    };
+
+
+}
+
+
+function getStockDrafts() {
+
+
+    try {
+        return JSON.parse(localStorage.getItem(STOCK_STORAGE_KEY)) || {};
+    } catch (error) {
+        return {};
+    }
+
+
+}
+
+
+function stopStockQrScanner() {
+
+
+    stockScanPaused = true;
+    clearStockScanTimer();
+
+
+}
+
+
+function clearStockScanTimer() {
+
+
+    if (stockScanTimeoutId) {
+        window.clearTimeout(stockScanTimeoutId);
+        stockScanTimeoutId = null;
+    }
+
+
+}
+
+
+function clearStockReturnTimer() {
+
+
+    if (stockReturnTimeoutId) {
+        window.clearTimeout(stockReturnTimeoutId);
+        stockReturnTimeoutId = null;
+    }
+
+
+}
+
+
+function updateStockStatus(message, isError) {
+
+
+    const stockStatus = document.getElementById("stockStatus");
+
+
+    stockStatus.textContent = message;
+    stockStatus.classList.toggle("error", Boolean(isError));
 
 
 }
