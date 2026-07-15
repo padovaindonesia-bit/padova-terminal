@@ -1,4 +1,5 @@
 const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyr_lFf_Asv8TkYkCP8E8hRyh3WFYX6N-LxTG0X1d8S_Az_wx_6Qv0bVLBsj9AMSr4/exec";
+const ADMIN_PIN = "1234";
 
 
 const STAFF_MEMBERS = {
@@ -49,6 +50,12 @@ let workflowRunId = 0;
 let autoReturnTimeoutId = null;
 let lastQrValue = "";
 let lastQrReadAt = 0;
+let adminLogoTapCount = 0;
+let adminLogoTapTimeoutId = null;
+let generatedQrFileName = "";
+
+
+setupAdminPinInput();
 
 
 function showAttendance() {
@@ -58,8 +65,7 @@ function showAttendance() {
     workflowInProgress = false;
     workflowRunId += 1;
     clearAutoReturnTimer();
-    document.getElementById("home").classList.remove("active");
-    document.getElementById("attendance").classList.add("active");
+    showPage("attendance");
     resetAttendanceScreen();
     startCamera(true);
 
@@ -74,9 +80,312 @@ function goHome() {
     workflowInProgress = false;
     workflowRunId += 1;
     clearAutoReturnTimer();
+    closeAdminPinDialog();
     stopCamera();
-    document.getElementById("attendance").classList.remove("active");
-    document.getElementById("home").classList.add("active");
+    showPage("home");
+
+
+}
+
+
+function showPage(pageId) {
+
+
+    document.querySelectorAll(".page").forEach(function(page) {
+        page.classList.remove("active");
+    });
+
+
+    document.getElementById(pageId).classList.add("active");
+
+
+}
+
+
+function setupAdminPinInput() {
+
+
+    const pinInput = document.getElementById("adminPinInput");
+
+
+    if (!pinInput) {
+        return;
+    }
+
+
+    pinInput.addEventListener("keydown", function(event) {
+        if (event.key === "Enter") {
+            submitAdminPin();
+        }
+
+
+        if (event.key === "Escape") {
+            closeAdminPinDialog();
+        }
+    });
+
+
+}
+
+
+function handleLogoTap() {
+
+
+    adminLogoTapCount += 1;
+
+
+    if (adminLogoTapTimeoutId) {
+        window.clearTimeout(adminLogoTapTimeoutId);
+    }
+
+
+    adminLogoTapTimeoutId = window.setTimeout(function() {
+        adminLogoTapCount = 0;
+        adminLogoTapTimeoutId = null;
+    }, 2500);
+
+
+    if (adminLogoTapCount >= 5) {
+        adminLogoTapCount = 0;
+        openAdminPinDialog();
+    }
+
+
+}
+
+
+function openAdminPinDialog() {
+
+
+    const pinInput = document.getElementById("adminPinInput");
+
+
+    document.getElementById("adminPinError").hidden = true;
+    document.getElementById("adminPinModal").hidden = false;
+    pinInput.value = "";
+    pinInput.focus();
+
+
+}
+
+
+function closeAdminPinDialog() {
+
+
+    const pinModal = document.getElementById("adminPinModal");
+
+
+    if (pinModal) {
+        pinModal.hidden = true;
+    }
+
+
+}
+
+
+function submitAdminPin() {
+
+
+    const pinInput = document.getElementById("adminPinInput");
+    const pinError = document.getElementById("adminPinError");
+
+
+    if (pinInput.value === ADMIN_PIN) {
+        closeAdminPinDialog();
+        showAdminDashboard();
+        return;
+    }
+
+
+    pinError.hidden = false;
+    pinInput.value = "";
+    pinInput.focus();
+
+
+}
+
+
+function showAdminDashboard() {
+
+
+    stopCamera();
+    showPage("adminDashboard");
+
+
+}
+
+
+function showQrGenerator() {
+
+
+    showPage("qrGenerator");
+    showQrTypeMenu();
+
+
+}
+
+
+function showQrTypeMenu() {
+
+
+    document.getElementById("qrTypeMenu").hidden = false;
+    document.getElementById("qrFormPanel").hidden = true;
+    document.getElementById("staffQrFields").hidden = true;
+    document.getElementById("inventoryQrFields").hidden = true;
+    resetQrGeneratorResult();
+
+
+}
+
+
+function showQrForm(qrType) {
+
+
+    document.getElementById("qrTypeMenu").hidden = true;
+    document.getElementById("qrFormPanel").hidden = false;
+    document.getElementById("staffQrFields").hidden = qrType !== "staff";
+    document.getElementById("inventoryQrFields").hidden = qrType !== "inventory";
+    resetQrGeneratorResult();
+
+
+}
+
+
+function generateStaffQr() {
+
+
+    const staffId = normalizeQrValue(document.getElementById("staffQrId").value);
+    const staffName = document.getElementById("staffQrName").value.trim();
+
+
+    if (!staffName || !staffId) {
+        updateQrGeneratorStatus("Isi nama dan Staff ID terlebih dahulu.", true);
+        return;
+    }
+
+
+    generateQrCode(staffId, staffId + ".png");
+
+
+}
+
+
+function generateInventoryQr() {
+
+
+    const sku = normalizeQrValue(document.getElementById("inventoryQrSku").value);
+    const itemName = document.getElementById("inventoryQrName").value.trim();
+
+
+    if (!itemName || !sku) {
+        updateQrGeneratorStatus("Isi nama barang dan SKU terlebih dahulu.", true);
+        return;
+    }
+
+
+    generateQrCode(sku, sku + ".png");
+
+
+}
+
+
+function generateQrCode(qrContent, fileName) {
+
+
+    const qrPreviewCanvas = document.getElementById("qrPreviewCanvas");
+
+
+    if (!window.QRCode || !window.QRCode.toCanvas) {
+        updateQrGeneratorStatus("Generator QR belum siap. Coba muat ulang halaman.", true);
+        return;
+    }
+
+
+    window.QRCode.toCanvas(qrPreviewCanvas, qrContent, {
+        errorCorrectionLevel: "H",
+        margin: 4,
+        width: 1024,
+        color: {
+            dark: "#000000",
+            light: "#FFFFFF"
+        }
+    }, function(error) {
+        if (error) {
+            updateQrGeneratorStatus("QR belum bisa dibuat. Coba lagi.", true);
+            return;
+        }
+
+
+        generatedQrFileName = sanitizeFileName(fileName);
+        document.getElementById("qrPreviewLabel").textContent = qrContent;
+        document.getElementById("qrPreviewPanel").hidden = false;
+        updateQrGeneratorStatus("QR berhasil dibuat.");
+    });
+
+
+}
+
+
+function downloadGeneratedQr() {
+
+
+    const qrPreviewCanvas = document.getElementById("qrPreviewCanvas");
+
+
+    if (!generatedQrFileName) {
+        updateQrGeneratorStatus("Generate QR terlebih dahulu.", true);
+        return;
+    }
+
+
+    const downloadLink = document.createElement("a");
+    downloadLink.href = qrPreviewCanvas.toDataURL("image/png");
+    downloadLink.download = generatedQrFileName;
+    downloadLink.click();
+
+
+}
+
+
+function resetQrGeneratorResult() {
+
+
+    generatedQrFileName = "";
+    document.getElementById("qrGeneratorStatus").textContent = "";
+    document.getElementById("qrGeneratorStatus").classList.remove("error");
+    document.getElementById("qrPreviewPanel").hidden = true;
+    document.getElementById("qrPreviewLabel").textContent = "";
+
+
+}
+
+
+function updateQrGeneratorStatus(message, isError) {
+
+
+    const qrGeneratorStatus = document.getElementById("qrGeneratorStatus");
+
+
+    qrGeneratorStatus.textContent = message;
+    qrGeneratorStatus.classList.toggle("error", Boolean(isError));
+
+
+}
+
+
+function normalizeQrValue(value) {
+
+
+    return value.trim().toUpperCase().replace(/\s+/g, "");
+
+
+}
+
+
+function sanitizeFileName(fileName) {
+
+
+    return fileName.replace(/[^a-z0-9._-]/gi, "_");
 
 
 }
