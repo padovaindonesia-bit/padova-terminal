@@ -47,10 +47,12 @@ const STOCK_ITEMS = {
 const ATTENDANCE_STORAGE_KEY = "padovaAttendanceDrafts";
 const STOCK_STORAGE_KEY = "padovaStockDrafts";
 const QR_SCAN_DELAY_MS = 500;
+const STOCK_INVALID_QR_DELAY_MS = 3000;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
 const MESSAGE_DISPLAY_DELAY_MS = 4500;
 const COUNTDOWN_DELAY_MS = 1000;
 const SUCCESS_RETURN_DELAY_MS = 4500;
+const STOCK_SUCCESS_RETURN_DELAY_MS = 5000;
 const SHEETS_REQUEST_TIMEOUT_MS = 10000;
 const SHEETS_WRITE_FALLBACK_TIMEOUT_MS = 5000;
 
@@ -71,6 +73,7 @@ let generatedQrFileName = "";
 let stockCameraStream = null;
 let stockQrDetector = null;
 let stockScanTimeoutId = null;
+let stockInvalidQrTimeoutId = null;
 let stockScanPaused = false;
 let stockIsOpen = false;
 let selectedStockItem = null;
@@ -148,6 +151,7 @@ function resetStockScreen() {
     selectedStockItem = null;
     stockQuantity = 0;
     stockScanPaused = false;
+    clearStockInvalidQrTimer();
     document.getElementById("stockInstruction").hidden = false;
     document.getElementById("stockCameraBox").hidden = false;
     document.getElementById("stockStatus").hidden = false;
@@ -218,6 +222,7 @@ function stopStockCamera() {
 
     stopStockQrScanner();
     stopStockQuantityHold();
+    clearStockInvalidQrTimer();
     stockIsOpen = false;
 
 
@@ -327,8 +332,7 @@ function handleStockQrCode(qrValue) {
 
 
     if (!item) {
-        updateStockStatus("QR tidak dikenali.\nSilakan scan QR barang yang valid.", true);
-        scheduleStockQrScan();
+        showInvalidStockQrMessage();
         return;
     }
 
@@ -337,6 +341,33 @@ function handleStockQrCode(qrValue) {
     stopStockQrScanner();
     selectedStockItem = getStockItemWithCurrentQty(item);
     showStockItemScreen(selectedStockItem);
+
+
+}
+
+
+function showInvalidStockQrMessage() {
+
+
+    stockScanPaused = true;
+    clearStockScanTimer();
+    clearStockInvalidQrTimer();
+    updateStockStatus("❌ QR tidak dikenali.\n\nSilakan scan QR barang yang valid.", true);
+
+
+    stockInvalidQrTimeoutId = window.setTimeout(function() {
+        stockInvalidQrTimeoutId = null;
+
+
+        if (!stockIsOpen || !stockCameraStream || selectedStockItem) {
+            return;
+        }
+
+
+        stockScanPaused = false;
+        updateStockStatus("Kamera siap. Scan QR barang.");
+        scheduleStockQrScan();
+    }, STOCK_INVALID_QR_DELAY_MS);
 
 
 }
@@ -388,7 +419,18 @@ function stopStockQuantityHold() {
 function changeStockQuantity(amount) {
 
 
-    setStockQuantity(stockQuantity + amount);
+    const nextQuantity = stockQuantity + amount;
+
+
+    if (nextQuantity < 0) {
+        updateStockStatus("❌ Jumlah tidak dapat lebih kecil dari 0.", true);
+        setStockQuantity(0);
+        return;
+    }
+
+
+    updateStockStatus("");
+    setStockQuantity(nextQuantity);
 
 
 }
@@ -413,8 +455,21 @@ async function handleStockAction(actionType) {
     }
 
 
+    if (actionType === "keluar" && selectedStockItem.stock <= 0) {
+        updateStockStatus("❌ Stock tidak mencukupi.\n\nTidak ada stock yang dapat dikeluarkan.", true);
+        return;
+    }
+
+
     if (stockQuantity <= 0) {
         updateStockStatus("Pilih jumlah terlebih dahulu.", true);
+        return;
+    }
+
+
+    if (actionType === "keluar" && stockQuantity > selectedStockItem.stock) {
+        setStockQuantity(selectedStockItem.stock);
+        updateStockStatus("❌ Jumlah melebihi stock yang tersedia.", true);
         return;
     }
 
@@ -429,7 +484,7 @@ async function handleStockAction(actionType) {
 
 
     selectedStockItem = getStockItemWithCurrentQty(selectedStockItem);
-    showStockSuccess(actionType, stockQuantity);
+    showStockSuccess(actionType, stockQuantity, result.stockAfter);
 
 
 }
@@ -442,7 +497,12 @@ function saveStockMovement(item, actionType, quantity) {
     const currentStock = getStockItemWithCurrentQty(item).stock;
     const nextStock = actionType === "masuk" ?
         currentStock + quantity :
-        Math.max(0, currentStock - quantity);
+        currentStock - quantity;
+
+
+    if (actionType === "keluar" && nextStock < 0) {
+        return { saved: false };
+    }
 
 
     stockDrafts[item.sku] = {
@@ -464,7 +524,7 @@ function saveStockMovement(item, actionType, quantity) {
             quantity: quantity,
             stockAfter: nextStock
         });
-        return { saved: true };
+        return { saved: true, stockAfter: nextStock };
     } catch (error) {
         return { saved: false };
     }
@@ -473,7 +533,7 @@ function saveStockMovement(item, actionType, quantity) {
 }
 
 
-function showStockSuccess(actionType, quantity) {
+function showStockSuccess(actionType, quantity, stockAfter) {
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -483,14 +543,15 @@ function showStockSuccess(actionType, quantity) {
     document.getElementById("stockSuccessPanel").hidden = false;
     document.getElementById("stockSuccessTitle").textContent = "✅ Stock berhasil diperbarui.";
     document.getElementById("stockSuccessText").textContent = actionType === "masuk" ?
-        quantity + " pcs berhasil ditambahkan." :
-        quantity + " pcs berhasil dikeluarkan.";
+        quantity + " pcs berhasil ditambahkan.\n\nStok sekarang:\n\n" + stockAfter + " pcs" :
+        quantity + " pcs berhasil dikeluarkan.\n\nStok sekarang:\n\n" + stockAfter + " pcs";
     waitForScreenRender().then(function() {
         stockReturnTimeoutId = window.setTimeout(function() {
             if (stockIsOpen) {
+                resetStockScreen();
                 goHome();
             }
-        }, SUCCESS_RETURN_DELAY_MS);
+        }, STOCK_SUCCESS_RETURN_DELAY_MS);
     });
 
 
@@ -555,6 +616,18 @@ function clearStockReturnTimer() {
     if (stockReturnTimeoutId) {
         window.clearTimeout(stockReturnTimeoutId);
         stockReturnTimeoutId = null;
+    }
+
+
+}
+
+
+function clearStockInvalidQrTimer() {
+
+
+    if (stockInvalidQrTimeoutId) {
+        window.clearTimeout(stockInvalidQrTimeoutId);
+        stockInvalidQrTimeoutId = null;
     }
 
 
