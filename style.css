@@ -43,6 +43,7 @@ display:block;
 width:100%;
 max-width:380px;
 margin:0 auto 25px;
+user-select:none;
 }
 
 
@@ -324,4 +325,172 @@ color:#888;
 line-height:1.6;
 
 
+}
+
+
+.primaryButton,
+.secondaryButton{
+width:100%;
+border:0;
+border-radius:24px;
+padding:20px 24px;
+font-size:22px;
+font-weight:bold;
+cursor:pointer;
+margin-top:18px;
+}
+
+
+.primaryButton{
+background:#EC7A68;
+color:#fff;
+}
+
+
+.secondaryButton{
+background:#fff;
+color:#EC7A68;
+border:3px solid #EC7A68;
+}
+
+
+.adminSectionHeader{
+margin-bottom:22px;
+}
+
+
+.qrFormPanel{
+margin-top:28px;
+padding:28px;
+border-radius:24px;
+background:#fff;
+box-shadow:0 10px 25px rgba(0,0,0,.08);
+text-align:left;
+}
+
+
+.formLabel{
+display:block;
+margin:18px 0 8px;
+font-size:18px;
+font-weight:bold;
+color:#444;
+}
+
+
+.formInput{
+width:100%;
+border:3px solid #E7D8D1;
+border-radius:18px;
+padding:18px;
+font-size:24px;
+color:#444;
+background:#fff;
+}
+
+
+.formInput:focus{
+outline:none;
+border-color:#EC7A68;
+}
+
+
+.qrPreviewPanel{
+margin-top:26px;
+padding-top:24px;
+border-top:2px solid #F1E4DE;
+text-align:center;
+}
+
+
+.qrPreviewCanvas{
+width:100%;
+max-width:320px;
+height:auto;
+background:#fff;
+border:3px solid #F1E4DE;
+border-radius:18px;
+padding:16px;
+}
+
+
+.qrPreviewLabel{
+margin-top:14px;
+font-size:28px;
+font-weight:bold;
+color:#444;
+word-break:break-word;
+}
+
+
+.pinModal{
+position:fixed;
+inset:0;
+z-index:10;
+display:flex;
+align-items:center;
+justify-content:center;
+background:rgba(0,0,0,.35);
+padding:25px;
+}
+
+
+.pinDialog{
+width:100%;
+max-width:420px;
+padding:30px;
+border-radius:24px;
+background:#F7F3EE;
+text-align:center;
+box-shadow:0 20px 45px rgba(0,0,0,.22);
+}
+
+
+.pinDialog h2{
+font-size:28px;
+color:#444;
+margin-bottom:22px;
+}
+
+
+.pinInput{
+width:100%;
+border:4px solid #EC7A68;
+border-radius:24px;
+padding:20px;
+font-size:34px;
+font-weight:bold;
+text-align:center;
+letter-spacing:0;
+color:#444;
+background:#fff;
+}
+
+
+.pinInput:focus{
+outline:none;
+}
+
+
+.pinError{
+margin-top:16px;
+font-size:18px;
+font-weight:bold;
+color:#EC7A68;
+}
+
+
+.pinActions{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:14px;
+margin-top:10px;
+}
+
+
+.pinActions .primaryButton,
+.pinActions .secondaryButton{
+margin-top:18px;
+padding:18px;
+font-size:20px;
 }
