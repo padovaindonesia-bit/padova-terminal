@@ -54,16 +54,13 @@ Quality You Can Feel.
 </div>
 
 
-<div class="card disabled">
+<div class="card activeCard" onclick="showStock()">
 
 
 <div class="icon">📦</div>
 
 
 <div class="title">Stock</div>
-
-
-<div class="subtitle">Segera Hadir</div>
 
 
 </div>
@@ -220,6 +217,144 @@ Kamera belum aktif.
 
 
 </div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+<div id="stock" class="page">
+
+
+<div class="container">
+
+
+<div class="back" onclick="goHome()">
+
+
+← Kembali
+
+
+</div>
+
+
+<h1>STOCK</h1>
+
+
+<p id="stockInstruction" class="instruction">
+
+
+Scan QR barang untuk mulai update stock.
+
+
+</p>
+
+
+<div id="stockCameraBox" class="cameraBox">
+
+
+<video id="stockCameraPreview" class="cameraPreview" autoplay muted playsinline></video>
+
+
+<div id="stockCameraFallback" class="cameraFallback">
+
+
+📦
+
+
+</div>
+
+
+</div>
+
+
+<p id="stockStatus" class="cameraStatus">
+
+
+Kamera belum aktif.
+
+
+</p>
+
+
+<div id="stockItemPanel" class="stockItemPanel" hidden>
+
+
+<div id="stockItemName" class="stockItemName">-</div>
+
+
+<div id="stockItemSku" class="stockItemSku">-</div>
+
+
+<div class="stockCurrentBlock">
+
+
+<div class="qrLabel">Stok Saat Ini</div>
+
+
+<div id="stockCurrentQty" class="stockCurrentQty">0 pcs</div>
+
+
+</div>
+
+
+<div class="stockQuantityBox">
+
+
+<div class="qrLabel">Jumlah</div>
+
+
+<div id="stockQuantityValue" class="stockQuantityValue">0</div>
+
+
+<div class="stockQuantityControls">
+
+
+<button type="button" class="quantityButton" onpointerdown="startStockQuantityHold(-10)" onpointerup="stopStockQuantityHold()" onpointerleave="stopStockQuantityHold()" onpointercancel="stopStockQuantityHold()">-10</button>
+
+
+<button type="button" class="quantityButton" onpointerdown="startStockQuantityHold(-1)" onpointerup="stopStockQuantityHold()" onpointerleave="stopStockQuantityHold()" onpointercancel="stopStockQuantityHold()">-1</button>
+
+
+<button type="button" class="quantityButton" onpointerdown="startStockQuantityHold(1)" onpointerup="stopStockQuantityHold()" onpointerleave="stopStockQuantityHold()" onpointercancel="stopStockQuantityHold()">+1</button>
+
+
+<button type="button" class="quantityButton" onpointerdown="startStockQuantityHold(10)" onpointerup="stopStockQuantityHold()" onpointerleave="stopStockQuantityHold()" onpointercancel="stopStockQuantityHold()">+10</button>
+
+
+</div>
+
+
+</div>
+
+
+<div class="stockActionGrid">
+
+
+<button type="button" class="stockActionButton stockInButton" onclick="handleStockAction('masuk')">🟢 MASUK</button>
+
+
+<button type="button" class="stockActionButton stockOutButton" onclick="handleStockAction('keluar')">🔴 KELUAR</button>
+
+
+</div>
+
+
+</div>
+
+
+<div id="stockSuccessPanel" class="workflowPanel" hidden>
+
+
+<div id="stockSuccessTitle" class="workflowTitle"></div>
+
+
+<p id="stockSuccessText" class="workflowText"></p>
 
 
 </div>
