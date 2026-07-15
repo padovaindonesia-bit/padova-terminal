@@ -29,7 +29,7 @@
 <div class="container">
 
 
-<img src="Logo%20Primary.png" class="logo">
+<img src="Logo%20Primary.png" class="logo" id="padovaLogo" onclick="handleLogoTap()">
 
 
 <div class="tagline">
@@ -229,6 +229,270 @@ Kamera belum aktif.
 
 
 </div>
+
+
+<div id="adminDashboard" class="page">
+
+
+<div class="container">
+
+
+<div class="back" onclick="goHome()">
+
+
+← Kembali
+
+
+</div>
+
+
+<h1>ADMIN</h1>
+
+
+<p class="instruction">
+
+
+Pusat kontrol PADOVA Terminal.
+
+
+</p>
+
+
+<div class="card disabled">
+
+
+<div class="icon">👤</div>
+
+
+<div class="title">Staff</div>
+
+
+<div class="subtitle">Segera Hadir</div>
+
+
+</div>
+
+
+<div class="card disabled">
+
+
+<div class="icon">📦</div>
+
+
+<div class="title">Inventory</div>
+
+
+<div class="subtitle">Segera Hadir</div>
+
+
+</div>
+
+
+<div class="card activeCard" onclick="showQrGenerator()">
+
+
+<div class="icon">🏷</div>
+
+
+<div class="title">QR Generator</div>
+
+
+</div>
+
+
+<div class="card disabled">
+
+
+<div class="icon">⚙</div>
+
+
+<div class="title">Settings</div>
+
+
+<div class="subtitle">Segera Hadir</div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+<div id="qrGenerator" class="page">
+
+
+<div class="container">
+
+
+<div class="back" onclick="showAdminDashboard()">
+
+
+← Kembali
+
+
+</div>
+
+
+<h1>QR GENERATOR</h1>
+
+
+<p class="instruction">
+
+
+Buat QR code untuk Staff atau Inventory.
+
+
+</p>
+
+
+<div id="qrTypeMenu">
+
+
+<div class="card activeCard" onclick="showQrForm('staff')">
+
+
+<div class="icon">👤</div>
+
+
+<div class="title">Staff QR</div>
+
+
+</div>
+
+
+<div class="card activeCard" onclick="showQrForm('inventory')">
+
+
+<div class="icon">📦</div>
+
+
+<div class="title">Inventory QR</div>
+
+
+</div>
+
+
+</div>
+
+
+<div id="qrFormPanel" class="qrFormPanel" hidden>
+
+
+<div class="adminSectionHeader">
+
+
+<button class="secondaryButton" type="button" onclick="showQrTypeMenu()">← Pilih Jenis QR</button>
+
+
+</div>
+
+
+<div id="staffQrFields" hidden>
+
+
+<label class="formLabel" for="staffQrName">Nama</label>
+
+
+<input id="staffQrName" class="formInput" type="text" autocomplete="off">
+
+
+<label class="formLabel" for="staffQrId">Staff ID</label>
+
+
+<input id="staffQrId" class="formInput" type="text" autocomplete="off">
+
+
+<button class="primaryButton" type="button" onclick="generateStaffQr()">Generate QR</button>
+
+
+</div>
+
+
+<div id="inventoryQrFields" hidden>
+
+
+<label class="formLabel" for="inventoryQrName">Nama Barang</label>
+
+
+<input id="inventoryQrName" class="formInput" type="text" autocomplete="off">
+
+
+<label class="formLabel" for="inventoryQrSku">SKU</label>
+
+
+<input id="inventoryQrSku" class="formInput" type="text" autocomplete="off">
+
+
+<button class="primaryButton" type="button" onclick="generateInventoryQr()">Generate QR</button>
+
+
+</div>
+
+
+<p id="qrGeneratorStatus" class="cameraStatus"></p>
+
+
+<div id="qrPreviewPanel" class="qrPreviewPanel" hidden>
+
+
+<canvas id="qrPreviewCanvas" class="qrPreviewCanvas"></canvas>
+
+
+<div id="qrPreviewLabel" class="qrPreviewLabel"></div>
+
+
+<button class="primaryButton" type="button" onclick="downloadGeneratedQr()">Download PNG</button>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+<div id="adminPinModal" class="pinModal" hidden>
+
+
+<div class="pinDialog">
+
+
+<h2>Masukkan PIN Admin</h2>
+
+
+<input id="adminPinInput" class="pinInput" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••">
+
+
+<p id="adminPinError" class="pinError" hidden>PIN salah.</p>
+
+
+<div class="pinActions">
+
+
+<button class="secondaryButton" type="button" onclick="closeAdminPinDialog()">Batal</button>
+
+
+<button class="primaryButton" type="button" onclick="submitAdminPin()">Masuk</button>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 
 
 <script src="script.js"></script>
