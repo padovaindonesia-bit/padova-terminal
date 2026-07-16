@@ -76,7 +76,9 @@ let stockScanTimeoutId = null;
 let stockInvalidQrTimeoutId = null;
 let stockScanPaused = false;
 let stockIsOpen = false;
+let stockScanMode = "item";
 let selectedStockItem = null;
+let pendingStockMovement = null;
 let stockQuantity = 0;
 let stockQuantityHoldIntervalId = null;
 let stockReturnTimeoutId = null;
@@ -149,14 +151,18 @@ function resetStockScreen() {
 
 
     selectedStockItem = null;
+    pendingStockMovement = null;
     stockQuantity = 0;
+    stockScanMode = "item";
     stockScanPaused = false;
     clearStockInvalidQrTimer();
     document.getElementById("stockInstruction").hidden = false;
+    document.getElementById("stockInstruction").textContent = "Scan QR barang untuk mulai update stock.";
     document.getElementById("stockCameraBox").hidden = false;
     document.getElementById("stockStatus").hidden = false;
     document.getElementById("stockItemPanel").hidden = true;
     document.getElementById("stockSuccessPanel").hidden = true;
+    document.getElementById("stockSuccessName").textContent = "";
     document.getElementById("stockQuantityValue").textContent = "0";
     updateStockStatus("Menyiapkan kamera...");
 
@@ -204,7 +210,9 @@ async function startStockCamera() {
         await stockCameraPreview.play();
         stockCameraPreview.classList.add("active");
         stockCameraFallback.classList.add("hidden");
-        updateStockStatus("Kamera siap. Scan QR barang.");
+        updateStockStatus(stockScanMode === "staff" ?
+            "Scan QR Staff untuk menyimpan stock." :
+            "Kamera siap. Scan QR barang.");
         startStockQrScanner();
     } catch (error) {
         stockCameraPreview.srcObject = null;
@@ -223,6 +231,7 @@ function stopStockCamera() {
     stopStockQrScanner();
     stopStockQuantityHold();
     clearStockInvalidQrTimer();
+    pendingStockMovement = null;
     stockIsOpen = false;
 
 
@@ -315,7 +324,9 @@ async function scanStockQrCode() {
             return;
         }
     } catch (error) {
-        updateStockStatus("Scanner QR sedang mencoba membaca barang...");
+        updateStockStatus(stockScanMode === "staff" ?
+            "Scanner QR sedang mencoba membaca Staff..." :
+            "Scanner QR sedang mencoba membaca barang...");
     }
 
 
@@ -326,6 +337,12 @@ async function scanStockQrCode() {
 
 
 function handleStockQrCode(qrValue) {
+
+
+    if (stockScanMode === "staff") {
+        handleStockStaffQrCode(qrValue);
+        return;
+    }
 
 
     const item = STOCK_ITEMS[normalizeQrValue(qrValue)];
@@ -341,6 +358,26 @@ function handleStockQrCode(qrValue) {
     stopStockQrScanner();
     selectedStockItem = getStockItemWithCurrentQty(item);
     showStockItemScreen(selectedStockItem);
+
+
+}
+
+
+function handleStockStaffQrCode(qrValue) {
+
+
+    const staff = STAFF_MEMBERS[normalizeQrValue(qrValue)];
+
+
+    if (!staff) {
+        showInvalidStockStaffQrMessage();
+        return;
+    }
+
+
+    stockScanPaused = true;
+    stopStockQrScanner();
+    finalizeStockMovement(staff);
 
 
 }
@@ -366,6 +403,33 @@ function showInvalidStockQrMessage() {
 
         stockScanPaused = false;
         updateStockStatus("Kamera siap. Scan QR barang.");
+        scheduleStockQrScan();
+    }, STOCK_INVALID_QR_DELAY_MS);
+
+
+}
+
+
+function showInvalidStockStaffQrMessage() {
+
+
+    stockScanPaused = true;
+    clearStockScanTimer();
+    clearStockInvalidQrTimer();
+    updateStockStatus("❌ QR Staff tidak dikenali.\n\nSilakan scan QR Staff yang valid.", true);
+
+
+    stockInvalidQrTimeoutId = window.setTimeout(function() {
+        stockInvalidQrTimeoutId = null;
+
+
+        if (!stockIsOpen || !stockCameraStream || stockScanMode !== "staff") {
+            return;
+        }
+
+
+        stockScanPaused = false;
+        updateStockStatus("Scan QR Staff untuk menyimpan stock.");
         scheduleStockQrScan();
     }, STOCK_INVALID_QR_DELAY_MS);
 
@@ -474,7 +538,61 @@ async function handleStockAction(actionType) {
     }
 
 
-    const result = saveStockMovement(selectedStockItem, actionType, stockQuantity);
+    pendingStockMovement = {
+        item: selectedStockItem,
+        actionType: actionType,
+        quantity: stockQuantity
+    };
+
+
+    showStockStaffScanner();
+
+
+}
+
+
+function showStockStaffScanner() {
+
+
+    stockScanMode = "staff";
+    stockScanPaused = false;
+    clearStockInvalidQrTimer();
+    document.getElementById("stockInstruction").hidden = false;
+    document.getElementById("stockInstruction").textContent = "Scan QR Staff untuk menyimpan stock.";
+    document.getElementById("stockCameraBox").hidden = false;
+    document.getElementById("stockStatus").hidden = false;
+    document.getElementById("stockItemPanel").hidden = true;
+    document.getElementById("stockSuccessPanel").hidden = true;
+    updateStockStatus("Scan QR Staff untuk menyimpan stock.");
+
+
+    if (stockCameraStream) {
+        startStockQrScanner();
+        return;
+    }
+
+
+    startStockCamera();
+
+
+}
+
+
+function finalizeStockMovement(staff) {
+
+
+    if (!pendingStockMovement) {
+        updateStockStatus("Transaksi stock belum siap. Coba scan barang lagi.", true);
+        return;
+    }
+
+
+    const result = saveStockMovement(
+        pendingStockMovement.item,
+        pendingStockMovement.actionType,
+        pendingStockMovement.quantity,
+        staff
+    );
 
 
     if (!result.saved) {
@@ -483,14 +601,19 @@ async function handleStockAction(actionType) {
     }
 
 
-    selectedStockItem = getStockItemWithCurrentQty(selectedStockItem);
-    showStockSuccess(actionType, stockQuantity, result.stockAfter);
+    selectedStockItem = getStockItemWithCurrentQty(pendingStockMovement.item);
+    showStockSuccess(
+        pendingStockMovement.actionType,
+        pendingStockMovement.quantity,
+        result.stockAfter,
+        staff
+    );
 
 
 }
 
 
-function saveStockMovement(item, actionType, quantity) {
+function saveStockMovement(item, actionType, quantity, staff) {
 
 
     const stockDrafts = getStockDrafts();
@@ -510,7 +633,9 @@ function saveStockMovement(item, actionType, quantity) {
         updatedAt: new Date().toISOString(),
         lastMovement: {
             type: actionType,
-            quantity: quantity
+            quantity: quantity,
+            staffId: staff.id,
+            staffName: staff.name
         }
     };
 
@@ -522,6 +647,8 @@ function saveStockMovement(item, actionType, quantity) {
             name: item.name,
             type: actionType,
             quantity: quantity,
+            staffId: staff.id,
+            staffName: staff.name,
             stockAfter: nextStock
         });
         return { saved: true, stockAfter: nextStock };
@@ -533,7 +660,7 @@ function saveStockMovement(item, actionType, quantity) {
 }
 
 
-function showStockSuccess(actionType, quantity, stockAfter) {
+function showStockSuccess(actionType, quantity, stockAfter, staff) {
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -541,6 +668,7 @@ function showStockSuccess(actionType, quantity, stockAfter) {
     document.getElementById("stockStatus").hidden = true;
     document.getElementById("stockItemPanel").hidden = true;
     document.getElementById("stockSuccessPanel").hidden = false;
+    document.getElementById("stockSuccessName").textContent = staff.name;
     document.getElementById("stockSuccessTitle").textContent = "✅ Stock berhasil diperbarui.";
     document.getElementById("stockSuccessText").textContent = actionType === "masuk" ?
         quantity + " pcs berhasil ditambahkan.\n\nStok sekarang:\n\n" + stockAfter + " pcs" :
