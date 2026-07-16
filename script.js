@@ -1,4 +1,4 @@
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyr_lFf_Asv8TkYkCP8E8hRyh3WFYX6N-LxTG0X1d8S_Az_wx_6Qv0bVLBsj9AMSr4/exec";
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyebliy1LZWyuNMl_ZiY52M9JHUxO7dY_cmIeNzN41Vxgk3rsGXPh3xn9io75m73eEI/exec";
 const ADMIN_PIN = "1234";
 
 
@@ -45,7 +45,9 @@ const STOCK_ITEMS = {
 
 
 const ATTENDANCE_STORAGE_KEY = "padovaAttendanceDrafts";
-const STOCK_STORAGE_KEY = "padovaStockDrafts";
+const STOCK_CACHE_STORAGE_KEY = "padovaStockCache";
+const STOCK_QUEUE_STORAGE_KEY = "padovaStockPendingQueue";
+const STOCK_TRANSACTION_COUNTER_KEY = "padovaStockTransactionCounter";
 const QR_SCAN_DELAY_MS = 500;
 const STOCK_INVALID_QR_DELAY_MS = 3000;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
@@ -82,9 +84,11 @@ let pendingStockMovement = null;
 let stockQuantity = 0;
 let stockQuantityHoldIntervalId = null;
 let stockReturnTimeoutId = null;
+let stockSyncInProgress = false;
 
 
 setupAdminPinInput();
+setupStockAutoSync();
 
 
 function showAttendance() {
@@ -320,7 +324,9 @@ async function scanStockQrCode() {
 
 
         if (barcodes.length > 0) {
-            handleStockQrCode(barcodes[0].rawValue.trim());
+            handleStockQrCode(barcodes[0].rawValue.trim()).catch(function() {
+                showStockItemLookupError({ code: "offline" });
+            });
             return;
         }
     } catch (error) {
@@ -336,7 +342,7 @@ async function scanStockQrCode() {
 }
 
 
-function handleStockQrCode(qrValue) {
+async function handleStockQrCode(qrValue) {
 
 
     if (stockScanMode === "staff") {
@@ -345,18 +351,32 @@ function handleStockQrCode(qrValue) {
     }
 
 
-    const item = STOCK_ITEMS[normalizeQrValue(qrValue)];
-
-
-    if (!item) {
-        showInvalidStockQrMessage();
-        return;
-    }
+    const itemCode = normalizeQrValue(qrValue);
 
 
     stockScanPaused = true;
     stopStockQrScanner();
-    selectedStockItem = getStockItemWithCurrentQty(item);
+    updateStockStatus("Mencari data barang...");
+
+
+    let item;
+
+
+    try {
+        item = await getStockItemFromSheets(itemCode);
+    } catch (error) {
+        showStockItemLookupError(error);
+        return;
+    }
+
+
+    if (!item) {
+        showStockItemLookupError({ code: "not-found" });
+        return;
+    }
+
+
+    selectedStockItem = item;
     showStockItemScreen(selectedStockItem);
 
 
@@ -377,19 +397,107 @@ function handleStockStaffQrCode(qrValue) {
 
     stockScanPaused = true;
     stopStockQrScanner();
-    finalizeStockMovement(staff);
+    finalizeStockMovement(staff).catch(function() {
+        updateStockStatus("Stock belum bisa diperbarui. Coba lagi.", true);
+    });
 
 
 }
 
 
-function showInvalidStockQrMessage() {
+async function getStockItemFromSheets(itemCode) {
+
+
+    if (!isGoogleSheetsConfigured()) {
+        const cachedItem = getCachedStockItem(itemCode);
+
+
+        if (cachedItem) {
+            return cachedItem;
+        }
+
+
+        return getLocalStockItem(itemCode);
+    }
+
+
+    try {
+        const response = await callGoogleSheets({
+            action: "stockItem",
+            itemCode: itemCode
+        });
+
+
+        if (!response.ok) {
+            throw { code: response.code || "not-found" };
+        }
+
+
+        const item = {
+            code: response.item.code,
+            name: response.item.name,
+            itemType: response.item.itemType || "",
+            status: response.item.status || "Active",
+            productionUnit: response.item.productionUnit || "pcs",
+            stock: Number(response.item.currentStock),
+            stockAvailable: response.item.stockAvailable === true
+        };
+
+
+        if (!item.stockAvailable || !Number.isFinite(item.stock)) {
+            item.stock = null;
+            item.stockAvailable = false;
+        }
+
+
+        cacheStockItem(item);
+        return item;
+    } catch (error) {
+        const cachedItem = getCachedStockItem(itemCode);
+
+
+        if (cachedItem) {
+            return cachedItem;
+        }
+
+
+        throw error.code ? error : { code: "offline" };
+    }
+
+
+}
+
+
+function showStockItemLookupError(error) {
+
+
+    const code = error && error.code;
+    let message = "❌ Barang tidak ditemukan.\n\nSilakan scan QR yang valid.";
+
+
+    if (code === "inactive") {
+        message = "❌ Barang ini sudah tidak aktif.\n\nHubungi Admin apabila diperlukan.";
+    }
+
+
+    if (code === "offline") {
+        message = "❌ Data barang belum tersedia.\n\nCoba sambungkan internet lalu scan ulang.";
+    }
+
+
+    showStockScanError(message);
+
+
+}
+
+
+function showStockScanError(message) {
 
 
     stockScanPaused = true;
     clearStockScanTimer();
     clearStockInvalidQrTimer();
-    updateStockStatus("❌ QR tidak dikenali.\n\nSilakan scan QR barang yang valid.", true);
+    updateStockStatus(message, true);
 
 
     stockInvalidQrTimeoutId = window.setTimeout(function() {
@@ -405,6 +513,15 @@ function showInvalidStockQrMessage() {
         updateStockStatus("Kamera siap. Scan QR barang.");
         scheduleStockQrScan();
     }, STOCK_INVALID_QR_DELAY_MS);
+
+
+}
+
+
+function showInvalidStockQrMessage() {
+
+
+    showStockScanError("❌ QR tidak dikenali.\n\nSilakan scan QR barang yang valid.");
 
 
 }
@@ -446,8 +563,10 @@ function showStockItemScreen(item) {
     document.getElementById("stockItemPanel").hidden = false;
     document.getElementById("stockSuccessPanel").hidden = true;
     document.getElementById("stockItemName").textContent = item.name;
-    document.getElementById("stockItemSku").textContent = item.sku;
-    document.getElementById("stockCurrentQty").textContent = item.stock + " pcs";
+    document.getElementById("stockItemSku").textContent = item.code;
+    document.getElementById("stockCurrentQty").textContent = item.stockAvailable ?
+        item.stock + " pcs" :
+        "Stock tidak tersedia (Offline)";
     setStockQuantity(0);
     updateStockStatus("");
 
@@ -519,7 +638,7 @@ async function handleStockAction(actionType) {
     }
 
 
-    if (actionType === "keluar" && selectedStockItem.stock <= 0) {
+    if (actionType === "keluar" && selectedStockItem.stockAvailable && selectedStockItem.stock <= 0) {
         updateStockStatus("❌ Stock tidak mencukupi.\n\nTidak ada stock yang dapat dikeluarkan.", true);
         return;
     }
@@ -531,7 +650,7 @@ async function handleStockAction(actionType) {
     }
 
 
-    if (actionType === "keluar" && stockQuantity > selectedStockItem.stock) {
+    if (actionType === "keluar" && selectedStockItem.stockAvailable && stockQuantity > selectedStockItem.stock) {
         setStockQuantity(selectedStockItem.stock);
         updateStockStatus("❌ Jumlah melebihi stock yang tersedia.", true);
         return;
@@ -578,7 +697,7 @@ function showStockStaffScanner() {
 }
 
 
-function finalizeStockMovement(staff) {
+async function finalizeStockMovement(staff) {
 
 
     if (!pendingStockMovement) {
@@ -587,7 +706,7 @@ function finalizeStockMovement(staff) {
     }
 
 
-    const result = saveStockMovement(
+    const result = await saveStockMovement(
         pendingStockMovement.item,
         pendingStockMovement.actionType,
         pendingStockMovement.quantity,
@@ -601,7 +720,15 @@ function finalizeStockMovement(staff) {
     }
 
 
-    selectedStockItem = getStockItemWithCurrentQty(pendingStockMovement.item);
+    selectedStockItem = updateCachedStockAfterMovement(pendingStockMovement.item, result.stockAfter);
+
+
+    if (result.pendingSync) {
+        showStockOfflineSuccess();
+        return;
+    }
+
+
     showStockSuccess(
         pendingStockMovement.actionType,
         pendingStockMovement.quantity,
@@ -613,47 +740,47 @@ function finalizeStockMovement(staff) {
 }
 
 
-function saveStockMovement(item, actionType, quantity, staff) {
+async function saveStockMovement(item, actionType, quantity, staff) {
 
 
-    const stockDrafts = getStockDrafts();
-    const currentStock = getStockItemWithCurrentQty(item).stock;
-    const nextStock = actionType === "masuk" ?
-        currentStock + quantity :
-        currentStock - quantity;
+    const stockBefore = item.stockAvailable ? item.stock : "";
+    const stockAfter = item.stockAvailable ?
+        calculateStockAfter(item.stock, actionType, quantity) :
+        "";
 
 
-    if (actionType === "keluar" && nextStock < 0) {
+    if (item.stockAvailable && actionType === "keluar" && stockAfter < 0) {
         return { saved: false };
     }
 
 
-    stockDrafts[item.sku] = {
-        stock: nextStock,
-        updatedAt: new Date().toISOString(),
-        lastMovement: {
-            type: actionType,
-            quantity: quantity,
-            staffId: staff.id,
-            staffName: staff.name
-        }
-    };
+    const transaction = createStockMovementTransaction(item, actionType, quantity, staff, stockBefore, stockAfter);
+
+
+    if (!isGoogleSheetsConfigured() || !navigator.onLine) {
+        return queueStockMovement(transaction);
+    }
 
 
     try {
-        localStorage.setItem(STOCK_STORAGE_KEY, JSON.stringify(stockDrafts));
-        console.log("Stock movement", {
-            sku: item.sku,
-            name: item.name,
-            type: actionType,
-            quantity: quantity,
-            staffId: staff.id,
-            staffName: staff.name,
-            stockAfter: nextStock
-        });
-        return { saved: true, stockAfter: nextStock };
+        const response = await callGoogleSheets(Object.assign({
+            action: "stockRecord"
+        }, transaction));
+
+
+        if (!response.ok) {
+            return { saved: false };
+        }
+
+
+        return {
+            saved: true,
+            pendingSync: false,
+            stockAfter: transaction.stockAfter,
+            transactionId: transaction.transactionId
+        };
     } catch (error) {
-        return { saved: false };
+        return queueStockMovement(transaction);
     }
 
 
@@ -661,6 +788,11 @@ function saveStockMovement(item, actionType, quantity, staff) {
 
 
 function showStockSuccess(actionType, quantity, stockAfter, staff) {
+
+
+    const stockAfterText = stockAfter === "" ?
+        "Stock tidak tersedia (Offline)" :
+        stockAfter + " pcs";
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -671,8 +803,8 @@ function showStockSuccess(actionType, quantity, stockAfter, staff) {
     document.getElementById("stockSuccessName").textContent = staff.name;
     document.getElementById("stockSuccessTitle").textContent = "✅ Stock berhasil diperbarui.";
     document.getElementById("stockSuccessText").textContent = actionType === "masuk" ?
-        quantity + " pcs berhasil ditambahkan.\n\nStok sekarang:\n\n" + stockAfter + " pcs" :
-        quantity + " pcs berhasil dikeluarkan.\n\nStok sekarang:\n\n" + stockAfter + " pcs";
+        quantity + " pcs berhasil ditambahkan.\n\nStock sekarang\n\n" + stockAfterText :
+        quantity + " pcs berhasil dikeluarkan.\n\nStock sekarang\n\n" + stockAfterText;
     waitForScreenRender().then(function() {
         stockReturnTimeoutId = window.setTimeout(function() {
             if (stockIsOpen) {
@@ -686,31 +818,300 @@ function showStockSuccess(actionType, quantity, stockAfter, staff) {
 }
 
 
-function getStockItemWithCurrentQty(item) {
+function showStockOfflineSuccess() {
 
 
-    const stockDrafts = getStockDrafts();
-    const savedStock = stockDrafts[item.sku] && Number(stockDrafts[item.sku].stock);
+    document.getElementById("stockInstruction").hidden = true;
+    document.getElementById("stockCameraBox").hidden = true;
+    document.getElementById("stockStatus").hidden = true;
+    document.getElementById("stockItemPanel").hidden = true;
+    document.getElementById("stockSuccessPanel").hidden = false;
+    document.getElementById("stockSuccessName").textContent = "";
+    document.getElementById("stockSuccessTitle").textContent = "✅ Transaksi berhasil disimpan.";
+    document.getElementById("stockSuccessText").textContent =
+        "Tidak ada koneksi internet.\n\nTransaksi akan otomatis disinkronkan saat koneksi tersedia.";
+    waitForScreenRender().then(function() {
+        stockReturnTimeoutId = window.setTimeout(function() {
+            if (stockIsOpen) {
+                resetStockScreen();
+                goHome();
+            }
+        }, MESSAGE_DISPLAY_DELAY_MS);
+    });
+
+
+}
+
+
+function createStockMovementTransaction(item, actionType, quantity, staff, stockBefore, stockAfter) {
+
+
+    const now = new Date();
 
 
     return {
-        sku: item.sku,
-        name: item.name,
-        stock: Number.isFinite(savedStock) ? savedStock : item.stock
+        transactionId: generateStockTransactionId(),
+        date: formatDateValue(now),
+        time: formatTimeValue(now),
+        staffId: staff.id,
+        staffName: staff.name,
+        itemCode: item.code,
+        itemName: item.name,
+        movement: actionType === "masuk" ? "Adjustment (+)" : "Adjustment (-)",
+        qty: String(quantity),
+        stockBefore: String(stockBefore),
+        stockAfter: String(stockAfter)
     };
 
 
 }
 
 
-function getStockDrafts() {
+function calculateStockAfter(stockBefore, actionType, quantity) {
+
+
+    return actionType === "masuk" ?
+        stockBefore + quantity :
+        stockBefore - quantity;
+
+
+}
+
+
+function generateStockTransactionId() {
+
+
+    const nextNumber = Number(localStorage.getItem(STOCK_TRANSACTION_COUNTER_KEY) || "0") + 1;
+    localStorage.setItem(STOCK_TRANSACTION_COUNTER_KEY, String(nextNumber));
+    return "STK-" + String(nextNumber).padStart(6, "0");
+
+
+}
+
+
+function formatDateValue(date) {
+
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+
+    return year + "-" + month + "-" + day;
+
+
+}
+
+
+function formatTimeValue(date) {
+
+
+    const hour = String(date.getHours()).padStart(2, "0");
+    const minute = String(date.getMinutes()).padStart(2, "0");
+    const second = String(date.getSeconds()).padStart(2, "0");
+
+
+    return hour + ":" + minute + ":" + second;
+
+
+}
+
+
+function queueStockMovement(transaction) {
+
+
+    const queue = getStockPendingQueue();
+    const isDuplicate = queue.some(function(item) {
+        return item.transactionId === transaction.transactionId;
+    });
+
+
+    if (!isDuplicate) {
+        queue.push(transaction);
+        saveStockPendingQueue(queue);
+    }
+
+
+    return {
+        saved: true,
+        pendingSync: true,
+        stockAfter: transaction.stockAfter,
+        transactionId: transaction.transactionId
+    };
+
+
+}
+
+
+function getStockPendingQueue() {
 
 
     try {
-        return JSON.parse(localStorage.getItem(STOCK_STORAGE_KEY)) || {};
+        return JSON.parse(localStorage.getItem(STOCK_QUEUE_STORAGE_KEY)) || [];
+    } catch (error) {
+        return [];
+    }
+
+
+}
+
+
+function saveStockPendingQueue(queue) {
+
+
+    localStorage.setItem(STOCK_QUEUE_STORAGE_KEY, JSON.stringify(queue));
+
+
+}
+
+
+function setupStockAutoSync() {
+
+
+    window.addEventListener("online", syncPendingStockMovements);
+    window.setInterval(syncPendingStockMovements, 60000);
+    syncPendingStockMovements();
+
+
+}
+
+
+async function syncPendingStockMovements() {
+
+
+    if (stockSyncInProgress || !isGoogleSheetsConfigured() || !navigator.onLine) {
+        return;
+    }
+
+
+    stockSyncInProgress = true;
+
+
+    const queue = getStockPendingQueue();
+
+
+    if (queue.length === 0) {
+        stockSyncInProgress = false;
+        return;
+    }
+
+
+    const remainingQueue = queue.slice();
+
+
+    try {
+        while (remainingQueue.length > 0) {
+            const transaction = remainingQueue[0];
+
+
+            try {
+                const response = await callGoogleSheets(Object.assign({
+                    action: "stockRecord"
+                }, transaction));
+
+
+                if (!response.ok) {
+                    break;
+                }
+
+
+                remainingQueue.shift();
+                saveStockPendingQueue(remainingQueue);
+            } catch (error) {
+                break;
+            }
+        }
+    } finally {
+        stockSyncInProgress = false;
+    }
+
+
+}
+
+
+function updateCachedStockAfterMovement(item, stockAfter) {
+
+
+    if (stockAfter === "" || stockAfter === null || stockAfter === undefined) {
+        return item;
+    }
+
+
+    const nextItem = Object.assign({}, item, {
+        stock: Number(stockAfter),
+        stockAvailable: true
+    });
+
+
+    cacheStockItem(nextItem);
+    return nextItem;
+
+
+}
+
+
+function getCachedStockItem(itemCode) {
+
+
+    const cache = getStockCache();
+    const cachedItem = cache[itemCode];
+
+
+    if (!cachedItem) {
+        return null;
+    }
+
+
+    return cachedItem;
+
+
+}
+
+
+function cacheStockItem(item) {
+
+
+    const cache = getStockCache();
+    cache[item.code] = item;
+    localStorage.setItem(STOCK_CACHE_STORAGE_KEY, JSON.stringify(cache));
+
+
+}
+
+
+function getStockCache() {
+
+
+    try {
+        return JSON.parse(localStorage.getItem(STOCK_CACHE_STORAGE_KEY)) || {};
     } catch (error) {
         return {};
     }
+
+
+}
+
+
+function getLocalStockItem(itemCode) {
+
+
+    const localItem = STOCK_ITEMS[itemCode];
+
+
+    if (!localItem) {
+        return null;
+    }
+
+
+    return {
+        code: localItem.sku,
+        name: localItem.name,
+        itemType: "",
+        status: "Active",
+        productionUnit: "pcs",
+        stock: localItem.stock,
+        stockAvailable: Number.isFinite(localItem.stock)
+    };
 
 
 }
