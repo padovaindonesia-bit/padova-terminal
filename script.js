@@ -53,8 +53,7 @@ const STOCK_INVALID_QR_DELAY_MS = 3000;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
 const MESSAGE_DISPLAY_DELAY_MS = 4500;
 const COUNTDOWN_DELAY_MS = 1000;
-const SUCCESS_RETURN_DELAY_MS = 4500;
-const STOCK_SUCCESS_RETURN_DELAY_MS = 5000;
+const SUCCESS_MESSAGE_DURATION_MS = 2500;
 const SHEETS_REQUEST_TIMEOUT_MS = 10000;
 const SHEETS_WRITE_FALLBACK_TIMEOUT_MS = 5000;
 
@@ -811,7 +810,7 @@ function showStockSuccess(actionType, quantity, stockAfter, staff) {
                 resetStockScreen();
                 goHome();
             }
-        }, STOCK_SUCCESS_RETURN_DELAY_MS);
+        }, SUCCESS_MESSAGE_DURATION_MS);
     });
 
 
@@ -836,7 +835,7 @@ function showStockOfflineSuccess() {
                 resetStockScreen();
                 goHome();
             }
-        }, MESSAGE_DISPLAY_DELAY_MS);
+        }, SUCCESS_MESSAGE_DURATION_MS);
     });
 
 
@@ -2790,7 +2789,7 @@ function scheduleReturnHome() {
         if (attendanceIsOpen) {
             goHome();
         }
-    }, SUCCESS_RETURN_DELAY_MS);
+    }, SUCCESS_MESSAGE_DURATION_MS);
 
 
 }
