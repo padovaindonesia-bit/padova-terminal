@@ -550,7 +550,7 @@ background:#F7F3EE;
 display:inline-flex;
 align-items:center;
 justify-content:center;
-min-width:160px;
+min-width:0;
 min-height:96px;
 padding:10px 28px;
 border:3px solid #E7D8D2;
@@ -560,16 +560,18 @@ font-size:70px;
 font-weight:bold;
 color:#444;
 line-height:1;
-margin:14px 0 22px;
+margin:0;
+text-align:center;
 }
 
 
 .stockQuantityControls{
 display:grid;
-grid-template-columns:repeat(2,1fr);
+grid-template-columns:repeat(3,minmax(72px,1fr)) minmax(130px,1.35fr) repeat(3,minmax(72px,1fr));
 gap:12px;
-max-width:420px;
+max-width:100%;
 margin:0 auto;
+align-items:stretch;
 }
 
 
