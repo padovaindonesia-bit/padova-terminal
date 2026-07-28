@@ -2,6 +2,8 @@ const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyebliy1
 const ADMIN_PIN = "1234";
 
 
+
+
 const STAFF_MEMBERS = {
     "PDV-S001": {
         id: "PDV-S001",
@@ -30,6 +32,8 @@ const STAFF_MEMBERS = {
 };
 
 
+
+
 const STOCK_ITEMS = {
     "BP1W": {
         sku: "BP1W",
@@ -44,10 +48,13 @@ const STOCK_ITEMS = {
 };
 
 
+
+
 const ATTENDANCE_STORAGE_KEY = "padovaAttendanceDrafts";
 const STOCK_CACHE_STORAGE_KEY = "padovaStockCache";
 const STOCK_QUEUE_STORAGE_KEY = "padovaStockPendingQueue";
 const STOCK_TRANSACTION_COUNTER_KEY = "padovaStockTransactionCounter";
+const QUANTITY_STEPS = [1, 10, 100];
 const QR_SCAN_DELAY_MS = 250;
 const STOCK_INVALID_QR_DELAY_MS = 2000;
 const DUPLICATE_SCAN_DELAY_MS = 1500;
@@ -56,6 +63,8 @@ const COUNTDOWN_DELAY_MS = 300;
 const SUCCESS_MESSAGE_DURATION_MS = 2000;
 const SHEETS_REQUEST_TIMEOUT_MS = 5000;
 const SHEETS_WRITE_FALLBACK_TIMEOUT_MS = 3000;
+
+
 
 
 let cameraStream = null;
@@ -86,11 +95,18 @@ let stockReturnTimeoutId = null;
 let stockSyncInProgress = false;
 
 
+
+
 setupAdminPinInput();
 setupStockAutoSync();
+setupStockQuantityControls();
+
+
 
 
 function showAttendance() {
+
+
 
 
     attendanceIsOpen = true;
@@ -102,10 +118,16 @@ function showAttendance() {
     startCamera(true);
 
 
+
+
 }
 
 
+
+
 function goHome() {
+
+
 
 
     attendanceIsOpen = false;
@@ -119,10 +141,16 @@ function goHome() {
     showPage("home");
 
 
+
+
 }
 
 
+
+
 function showPage(pageId) {
+
+
 
 
     document.querySelectorAll(".page").forEach(function(page) {
@@ -130,13 +158,21 @@ function showPage(pageId) {
     });
 
 
+
+
     document.getElementById(pageId).classList.add("active");
+
+
 
 
 }
 
 
+
+
 function showStock() {
+
+
 
 
     stockIsOpen = true;
@@ -147,10 +183,16 @@ function showStock() {
     startStockCamera();
 
 
+
+
 }
 
 
+
+
 function resetStockScreen() {
+
+
 
 
     selectedStockItem = null;
@@ -166,18 +208,26 @@ function resetStockScreen() {
     document.getElementById("stockItemPanel").hidden = true;
     document.getElementById("stockSuccessPanel").hidden = true;
     document.getElementById("stockSuccessName").textContent = "";
-    document.getElementById("stockQuantityValue").textContent = "0";
+    setStockQuantity(0);
     updateStockStatus("Menyiapkan kamera...");
+
+
 
 
 }
 
 
+
+
 async function startStockCamera() {
+
+
 
 
     const stockCameraPreview = document.getElementById("stockCameraPreview");
     const stockCameraFallback = document.getElementById("stockCameraFallback");
+
+
 
 
     if (!window.isSecureContext && location.hostname !== "localhost") {
@@ -186,10 +236,14 @@ async function startStockCamera() {
     }
 
 
+
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         updateStockStatus("Browser ini belum bisa membuka kamera.", true);
         return;
     }
+
+
 
 
     try {
@@ -203,10 +257,14 @@ async function startStockCamera() {
         });
 
 
+
+
         if (!stockIsOpen) {
             stopStockCamera();
             return;
         }
+
+
 
 
         stockCameraPreview.srcObject = stockCameraStream;
@@ -225,10 +283,16 @@ async function startStockCamera() {
     }
 
 
+
+
 }
 
 
+
+
 function stopStockCamera() {
+
+
 
 
     stopStockQrScanner();
@@ -236,6 +300,8 @@ function stopStockCamera() {
     clearStockInvalidQrTimer();
     pendingStockMovement = null;
     stockIsOpen = false;
+
+
 
 
     if (stockCameraStream) {
@@ -246,8 +312,12 @@ function stopStockCamera() {
     }
 
 
+
+
     const stockCameraPreview = document.getElementById("stockCameraPreview");
     const stockCameraFallback = document.getElementById("stockCameraFallback");
+
+
 
 
     if (stockCameraPreview && stockCameraFallback) {
@@ -257,16 +327,24 @@ function stopStockCamera() {
     }
 
 
+
+
 }
 
 
+
+
 function startStockQrScanner() {
+
+
 
 
     if (!("BarcodeDetector" in window)) {
         updateStockStatus("Scanner QR belum tersedia. Coba update browser tablet ini.", true);
         return;
     }
+
+
 
 
     try {
@@ -279,37 +357,57 @@ function startStockQrScanner() {
     }
 
 
+
+
     stockScanPaused = false;
     scheduleStockQrScan();
+
+
 
 
 }
 
 
+
+
 function scheduleStockQrScan() {
+
+
 
 
     if (!stockIsOpen || !stockCameraStream || stockScanPaused) {
         return;
     }
+
+
 
 
     clearStockScanTimer();
     stockScanTimeoutId = window.setTimeout(scanStockQrCode, QR_SCAN_DELAY_MS);
 
 
+
+
 }
+
+
 
 
 async function scanStockQrCode() {
 
 
+
+
     const stockCameraPreview = document.getElementById("stockCameraPreview");
+
+
 
 
     if (!stockIsOpen || !stockCameraStream || stockScanPaused) {
         return;
     }
+
+
 
 
     if (stockCameraPreview.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
@@ -318,8 +416,12 @@ async function scanStockQrCode() {
     }
 
 
+
+
     try {
         const barcodes = await stockQrDetector.detect(stockCameraPreview);
+
+
 
 
         if (barcodes.length > 0) {
@@ -335,13 +437,21 @@ async function scanStockQrCode() {
     }
 
 
+
+
     scheduleStockQrScan();
+
+
 
 
 }
 
 
+
+
 async function handleStockQrCode(qrValue) {
+
+
 
 
     if (stockScanMode === "staff") {
@@ -350,7 +460,11 @@ async function handleStockQrCode(qrValue) {
     }
 
 
+
+
     const itemCode = normalizeQrValue(qrValue);
+
+
 
 
     stockScanPaused = true;
@@ -358,7 +472,11 @@ async function handleStockQrCode(qrValue) {
     updateStockStatus("Mencari data barang...");
 
 
+
+
     let item;
+
+
 
 
     try {
@@ -369,29 +487,43 @@ async function handleStockQrCode(qrValue) {
     }
 
 
+
+
     if (!item) {
         showStockItemLookupError({ code: "not-found" });
         return;
     }
 
 
+
+
     selectedStockItem = item;
     showStockItemScreen(selectedStockItem);
+
+
 
 
 }
 
 
+
+
 function handleStockStaffQrCode(qrValue) {
 
 
+
+
     const staff = STAFF_MEMBERS[normalizeQrValue(qrValue)];
+
+
 
 
     if (!staff) {
         showInvalidStockStaffQrMessage();
         return;
     }
+
+
 
 
     stockScanPaused = true;
@@ -401,14 +533,22 @@ function handleStockStaffQrCode(qrValue) {
     });
 
 
+
+
 }
+
+
 
 
 async function getStockItemFromSheets(itemCode) {
 
 
+
+
     if (!isGoogleSheetsConfigured()) {
         const cachedItem = getCachedStockItem(itemCode);
+
+
 
 
         if (cachedItem) {
@@ -416,8 +556,12 @@ async function getStockItemFromSheets(itemCode) {
         }
 
 
+
+
         return getLocalStockItem(itemCode);
     }
+
+
 
 
     try {
@@ -427,9 +571,13 @@ async function getStockItemFromSheets(itemCode) {
         });
 
 
+
+
         if (!response.ok) {
             throw { code: response.code || "not-found" };
         }
+
+
 
 
         const item = {
@@ -443,10 +591,14 @@ async function getStockItemFromSheets(itemCode) {
         };
 
 
+
+
         if (!item.stockAvailable || !Number.isFinite(item.stock)) {
             item.stock = null;
             item.stockAvailable = false;
         }
+
+
 
 
         cacheStockItem(item);
@@ -455,23 +607,35 @@ async function getStockItemFromSheets(itemCode) {
         const cachedItem = getCachedStockItem(itemCode);
 
 
+
+
         if (cachedItem) {
             return cachedItem;
         }
+
+
 
 
         throw error.code ? error : { code: "offline" };
     }
 
 
+
+
 }
+
+
 
 
 function showStockItemLookupError(error) {
 
 
+
+
     const code = error && error.code;
     let message = "❌ Barang tidak ditemukan.\n\nSilakan scan QR yang valid.";
+
+
 
 
     if (code === "inactive") {
@@ -479,18 +643,28 @@ function showStockItemLookupError(error) {
     }
 
 
+
+
     if (code === "offline") {
         message = "❌ Data barang belum tersedia.\n\nCoba sambungkan internet lalu scan ulang.";
     }
 
 
+
+
     showStockScanError(message);
+
+
 
 
 }
 
 
+
+
 function showStockScanError(message) {
+
+
 
 
     stockScanPaused = true;
@@ -499,13 +673,19 @@ function showStockScanError(message) {
     updateStockStatus(message, true);
 
 
+
+
     stockInvalidQrTimeoutId = window.setTimeout(function() {
         stockInvalidQrTimeoutId = null;
+
+
 
 
         if (!stockIsOpen || !stockCameraStream || selectedStockItem) {
             return;
         }
+
+
 
 
         stockScanPaused = false;
@@ -514,19 +694,31 @@ function showStockScanError(message) {
     }, STOCK_INVALID_QR_DELAY_MS);
 
 
+
+
 }
+
+
 
 
 function showInvalidStockQrMessage() {
 
 
+
+
     showStockScanError("❌ QR tidak dikenali.\n\nSilakan scan QR barang yang valid.");
+
+
 
 
 }
 
 
+
+
 function showInvalidStockStaffQrMessage() {
+
+
 
 
     stockScanPaused = true;
@@ -535,13 +727,19 @@ function showInvalidStockStaffQrMessage() {
     updateStockStatus("❌ QR Staff tidak dikenali.\n\nSilakan scan QR Staff yang valid.", true);
 
 
+
+
     stockInvalidQrTimeoutId = window.setTimeout(function() {
         stockInvalidQrTimeoutId = null;
+
+
 
 
         if (!stockIsOpen || !stockCameraStream || stockScanMode !== "staff") {
             return;
         }
+
+
 
 
         stockScanPaused = false;
@@ -550,10 +748,16 @@ function showInvalidStockStaffQrMessage() {
     }, STOCK_INVALID_QR_DELAY_MS);
 
 
+
+
 }
 
 
+
+
 function showStockItemScreen(item) {
+
+
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -570,10 +774,16 @@ function showStockItemScreen(item) {
     updateStockStatus("");
 
 
+
+
 }
 
 
+
+
 function startStockQuantityHold(amount) {
+
+
 
 
     changeStockQuantity(amount);
@@ -583,10 +793,16 @@ function startStockQuantityHold(amount) {
     }, 180);
 
 
+
+
 }
 
 
+
+
 function stopStockQuantityHold() {
+
+
 
 
     if (stockQuantityHoldIntervalId) {
@@ -595,13 +811,128 @@ function stopStockQuantityHold() {
     }
 
 
+
+
 }
+
+
+
+
+function setupStockQuantityControls() {
+
+
+
+
+    const stockQuantityControls = document.getElementById("stockQuantityControls");
+    const stockQuantityValue = document.getElementById("stockQuantityValue");
+
+
+
+
+    if (!stockQuantityControls || !stockQuantityValue) {
+        return;
+    }
+
+
+
+
+    stockQuantityControls.innerHTML = "";
+
+
+
+
+    QUANTITY_STEPS.slice().reverse().forEach(function(step) {
+        stockQuantityControls.appendChild(createStockQuantityButton(-step));
+    });
+
+
+
+
+    stockQuantityControls.appendChild(stockQuantityValue);
+
+
+
+
+    QUANTITY_STEPS.forEach(function(step) {
+        stockQuantityControls.appendChild(createStockQuantityButton(step));
+    });
+
+
+
+
+    stockQuantityValue.addEventListener("input", handleStockQuantityInput);
+
+
+
+
+}
+
+
+
+
+function createStockQuantityButton(amount) {
+
+
+
+
+    const button = document.createElement("button");
+    const label = amount > 0 ? "+" + amount : String(amount);
+
+
+
+
+    button.type = "button";
+    button.className = "quantityButton";
+    button.textContent = label;
+    button.setAttribute("aria-label", label + " pcs");
+    button.addEventListener("pointerdown", function() {
+        startStockQuantityHold(amount);
+    });
+    button.addEventListener("pointerup", stopStockQuantityHold);
+    button.addEventListener("pointerleave", stopStockQuantityHold);
+    button.addEventListener("pointercancel", stopStockQuantityHold);
+
+
+
+
+    return button;
+
+
+
+
+}
+
+
+
+
+function handleStockQuantityInput(event) {
+
+
+
+
+    const quantity = Number(event.target.value);
+
+
+
+
+    setStockQuantity(Number.isFinite(quantity) ? quantity : 0);
+
+
+
+
+}
+
+
 
 
 function changeStockQuantity(amount) {
 
 
+
+
     const nextQuantity = stockQuantity + amount;
+
+
 
 
     if (nextQuantity < 0) {
@@ -611,24 +942,51 @@ function changeStockQuantity(amount) {
     }
 
 
+
+
     updateStockStatus("");
     setStockQuantity(nextQuantity);
 
 
+
+
 }
+
+
 
 
 function setStockQuantity(quantity) {
 
 
+
+
     stockQuantity = Math.max(0, quantity);
-    document.getElementById("stockQuantityValue").textContent = String(stockQuantity);
+    const stockQuantityValue = document.getElementById("stockQuantityValue");
+
+
+
+
+    if ("value" in stockQuantityValue) {
+        stockQuantityValue.value = String(stockQuantity);
+        return;
+    }
+
+
+
+
+    stockQuantityValue.textContent = String(stockQuantity);
+
+
 
 
 }
 
 
+
+
 async function handleStockAction(actionType) {
+
+
 
 
     if (!selectedStockItem) {
@@ -637,16 +995,22 @@ async function handleStockAction(actionType) {
     }
 
 
+
+
     if (actionType === "keluar" && selectedStockItem.stockAvailable && selectedStockItem.stock <= 0) {
         updateStockStatus("❌ Stock tidak mencukupi.\n\nTidak ada stock yang dapat dikeluarkan.", true);
         return;
     }
 
 
+
+
     if (stockQuantity <= 0) {
         updateStockStatus("Pilih jumlah terlebih dahulu.", true);
         return;
     }
+
+
 
 
     if (actionType === "keluar" && selectedStockItem.stockAvailable && stockQuantity > selectedStockItem.stock) {
@@ -656,6 +1020,8 @@ async function handleStockAction(actionType) {
     }
 
 
+
+
     pendingStockMovement = {
         item: selectedStockItem,
         actionType: actionType,
@@ -663,13 +1029,21 @@ async function handleStockAction(actionType) {
     };
 
 
+
+
     showStockStaffScanner();
+
+
 
 
 }
 
 
+
+
 function showStockStaffScanner() {
+
+
 
 
     stockScanMode = "staff";
@@ -684,25 +1058,37 @@ function showStockStaffScanner() {
     updateStockStatus("Scan QR Staff untuk menyimpan stock.");
 
 
+
+
     if (stockCameraStream) {
         startStockQrScanner();
         return;
     }
 
 
+
+
     startStockCamera();
+
+
 
 
 }
 
 
+
+
 async function finalizeStockMovement(staff) {
+
+
 
 
     if (!pendingStockMovement) {
         updateStockStatus("Transaksi stock belum siap. Coba scan barang lagi.", true);
         return;
     }
+
+
 
 
     const result = await saveStockMovement(
@@ -713,19 +1099,27 @@ async function finalizeStockMovement(staff) {
     );
 
 
+
+
     if (!result.saved) {
         updateStockStatus("Stock belum bisa diperbarui. Coba lagi.", true);
         return;
     }
 
 
+
+
     selectedStockItem = updateCachedStockAfterMovement(pendingStockMovement.item, result.stockAfter);
+
+
 
 
     if (result.pendingSync) {
         showStockOfflineSuccess();
         return;
     }
+
+
 
 
     showStockSuccess(
@@ -736,10 +1130,16 @@ async function finalizeStockMovement(staff) {
     );
 
 
+
+
 }
 
 
+
+
 async function saveStockMovement(item, actionType, quantity, staff) {
+
+
 
 
     const stockBefore = item.stockAvailable ? item.stock : "";
@@ -748,17 +1148,25 @@ async function saveStockMovement(item, actionType, quantity, staff) {
         "";
 
 
+
+
     if (item.stockAvailable && actionType === "keluar" && stockAfter < 0) {
         return { saved: false };
     }
 
 
+
+
     const transaction = createStockMovementTransaction(item, actionType, quantity, staff, stockBefore, stockAfter);
+
+
 
 
     if (!isGoogleSheetsConfigured() || !navigator.onLine) {
         return queueStockMovement(transaction);
     }
+
+
 
 
     try {
@@ -767,9 +1175,13 @@ async function saveStockMovement(item, actionType, quantity, staff) {
         }, transaction));
 
 
+
+
         if (!response.ok) {
             return { saved: false };
         }
+
+
 
 
         return {
@@ -783,15 +1195,23 @@ async function saveStockMovement(item, actionType, quantity, staff) {
     }
 
 
+
+
 }
+
+
 
 
 function showStockSuccess(actionType, quantity, stockAfter, staff) {
 
 
+
+
     const stockAfterText = stockAfter === "" ?
         "Stock tidak tersedia (Offline)" :
         stockAfter + " pcs";
+
+
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -814,10 +1234,16 @@ function showStockSuccess(actionType, quantity, stockAfter, staff) {
     });
 
 
+
+
 }
 
 
+
+
 function showStockOfflineSuccess() {
+
+
 
 
     document.getElementById("stockInstruction").hidden = true;
@@ -839,13 +1265,21 @@ function showStockOfflineSuccess() {
     });
 
 
+
+
 }
+
+
 
 
 function createStockMovementTransaction(item, actionType, quantity, staff, stockBefore, stockAfter) {
 
 
+
+
     const now = new Date();
+
+
 
 
     return {
@@ -863,10 +1297,16 @@ function createStockMovementTransaction(item, actionType, quantity, staff, stock
     };
 
 
+
+
 }
 
 
+
+
 function calculateStockAfter(stockBefore, actionType, quantity) {
+
+
 
 
     return actionType === "masuk" ?
@@ -874,10 +1314,16 @@ function calculateStockAfter(stockBefore, actionType, quantity) {
         stockBefore - quantity;
 
 
+
+
 }
 
 
+
+
 function generateStockTransactionId() {
+
+
 
 
     const nextNumber = Number(localStorage.getItem(STOCK_TRANSACTION_COUNTER_KEY) || "0") + 1;
@@ -885,10 +1331,16 @@ function generateStockTransactionId() {
     return "STK-" + String(nextNumber).padStart(6, "0");
 
 
+
+
 }
 
 
+
+
 function formatDateValue(date) {
+
+
 
 
     const year = date.getFullYear();
@@ -896,13 +1348,21 @@ function formatDateValue(date) {
     const day = String(date.getDate()).padStart(2, "0");
 
 
+
+
     return year + "-" + month + "-" + day;
+
+
 
 
 }
 
 
+
+
 function formatTimeValue(date) {
+
+
 
 
     const hour = String(date.getHours()).padStart(2, "0");
@@ -910,13 +1370,21 @@ function formatTimeValue(date) {
     const second = String(date.getSeconds()).padStart(2, "0");
 
 
+
+
     return hour + ":" + minute + ":" + second;
+
+
 
 
 }
 
 
+
+
 function queueStockMovement(transaction) {
+
+
 
 
     const queue = getStockPendingQueue();
@@ -925,10 +1393,14 @@ function queueStockMovement(transaction) {
     });
 
 
+
+
     if (!isDuplicate) {
         queue.push(transaction);
         saveStockPendingQueue(queue);
     }
+
+
 
 
     return {
@@ -939,10 +1411,16 @@ function queueStockMovement(transaction) {
     };
 
 
+
+
 }
 
 
+
+
 function getStockPendingQueue() {
+
+
 
 
     try {
@@ -952,19 +1430,31 @@ function getStockPendingQueue() {
     }
 
 
+
+
 }
+
+
 
 
 function saveStockPendingQueue(queue) {
 
 
+
+
     localStorage.setItem(STOCK_QUEUE_STORAGE_KEY, JSON.stringify(queue));
+
+
 
 
 }
 
 
+
+
 function setupStockAutoSync() {
+
+
 
 
     window.addEventListener("online", syncPendingStockMovements);
@@ -972,10 +1462,16 @@ function setupStockAutoSync() {
     syncPendingStockMovements();
 
 
+
+
 }
 
 
+
+
 async function syncPendingStockMovements() {
+
+
 
 
     if (stockSyncInProgress || !isGoogleSheetsConfigured() || !navigator.onLine) {
@@ -983,10 +1479,16 @@ async function syncPendingStockMovements() {
     }
 
 
+
+
     stockSyncInProgress = true;
 
 
+
+
     const queue = getStockPendingQueue();
+
+
 
 
     if (queue.length === 0) {
@@ -995,12 +1497,18 @@ async function syncPendingStockMovements() {
     }
 
 
+
+
     const remainingQueue = queue.slice();
+
+
 
 
     try {
         while (remainingQueue.length > 0) {
             const transaction = remainingQueue[0];
+
+
 
 
             try {
@@ -1009,9 +1517,13 @@ async function syncPendingStockMovements() {
                 }, transaction));
 
 
+
+
                 if (!response.ok) {
                     break;
                 }
+
+
 
 
                 remainingQueue.shift();
@@ -1025,15 +1537,23 @@ async function syncPendingStockMovements() {
     }
 
 
+
+
 }
+
+
 
 
 function updateCachedStockAfterMovement(item, stockAfter) {
 
 
+
+
     if (stockAfter === "" || stockAfter === null || stockAfter === undefined) {
         return item;
     }
+
+
 
 
     const nextItem = Object.assign({}, item, {
@@ -1042,18 +1562,28 @@ function updateCachedStockAfterMovement(item, stockAfter) {
     });
 
 
+
+
     cacheStockItem(nextItem);
     return nextItem;
+
+
 
 
 }
 
 
+
+
 function getCachedStockItem(itemCode) {
+
+
 
 
     const cache = getStockCache();
     const cachedItem = cache[itemCode];
+
+
 
 
     if (!cachedItem) {
@@ -1061,13 +1591,21 @@ function getCachedStockItem(itemCode) {
     }
 
 
+
+
     return cachedItem;
+
+
 
 
 }
 
 
+
+
 function cacheStockItem(item) {
+
+
 
 
     const cache = getStockCache();
@@ -1075,10 +1613,16 @@ function cacheStockItem(item) {
     localStorage.setItem(STOCK_CACHE_STORAGE_KEY, JSON.stringify(cache));
 
 
+
+
 }
 
 
+
+
 function getStockCache() {
+
+
 
 
     try {
@@ -1088,18 +1632,28 @@ function getStockCache() {
     }
 
 
+
+
 }
+
+
 
 
 function getLocalStockItem(itemCode) {
 
 
+
+
     const localItem = STOCK_ITEMS[itemCode];
+
+
 
 
     if (!localItem) {
         return null;
     }
+
+
 
 
     return {
@@ -1113,20 +1667,32 @@ function getLocalStockItem(itemCode) {
     };
 
 
+
+
 }
 
 
+
+
 function stopStockQrScanner() {
+
+
 
 
     stockScanPaused = true;
     clearStockScanTimer();
 
 
+
+
 }
 
 
+
+
 function clearStockScanTimer() {
+
+
 
 
     if (stockScanTimeoutId) {
@@ -1135,10 +1701,16 @@ function clearStockScanTimer() {
     }
 
 
+
+
 }
 
 
+
+
 function clearStockReturnTimer() {
+
+
 
 
     if (stockReturnTimeoutId) {
@@ -1147,10 +1719,16 @@ function clearStockReturnTimer() {
     }
 
 
+
+
 }
 
 
+
+
 function clearStockInvalidQrTimer() {
+
+
 
 
     if (stockInvalidQrTimeoutId) {
@@ -1159,31 +1737,49 @@ function clearStockInvalidQrTimer() {
     }
 
 
+
+
 }
+
+
 
 
 function updateStockStatus(message, isError) {
 
 
+
+
     const stockStatus = document.getElementById("stockStatus");
+
+
 
 
     stockStatus.textContent = message;
     stockStatus.classList.toggle("error", Boolean(isError));
 
 
+
+
 }
+
+
 
 
 function setupAdminPinInput() {
 
 
+
+
     const pinInput = document.getElementById("adminPinInput");
+
+
 
 
     if (!pinInput) {
         return;
     }
+
+
 
 
     pinInput.addEventListener("keydown", function(event) {
@@ -1192,24 +1788,36 @@ function setupAdminPinInput() {
         }
 
 
+
+
         if (event.key === "Escape") {
             closeAdminPinDialog();
         }
     });
 
 
+
+
 }
+
+
 
 
 function handleLogoTap() {
 
 
+
+
     adminLogoTapCount += 1;
+
+
 
 
     if (adminLogoTapTimeoutId) {
         window.clearTimeout(adminLogoTapTimeoutId);
     }
+
+
 
 
     adminLogoTapTimeoutId = window.setTimeout(function() {
@@ -1218,19 +1826,29 @@ function handleLogoTap() {
     }, 2500);
 
 
+
+
     if (adminLogoTapCount >= 5) {
         adminLogoTapCount = 0;
         openAdminPinDialog();
     }
 
 
+
+
 }
+
+
 
 
 function openAdminPinDialog() {
 
 
+
+
     const pinInput = document.getElementById("adminPinInput");
+
+
 
 
     document.getElementById("adminPinError").hidden = true;
@@ -1239,13 +1857,21 @@ function openAdminPinDialog() {
     pinInput.focus();
 
 
+
+
 }
+
+
 
 
 function closeAdminPinDialog() {
 
 
+
+
     const pinModal = document.getElementById("adminPinModal");
+
+
 
 
     if (pinModal) {
@@ -1253,14 +1879,22 @@ function closeAdminPinDialog() {
     }
 
 
+
+
 }
+
+
 
 
 function submitAdminPin() {
 
 
+
+
     const pinInput = document.getElementById("adminPinInput");
     const pinError = document.getElementById("adminPinError");
+
+
 
 
     if (pinInput.value === ADMIN_PIN) {
@@ -1270,35 +1904,55 @@ function submitAdminPin() {
     }
 
 
+
+
     pinError.hidden = false;
     pinInput.value = "";
     pinInput.focus();
 
 
+
+
 }
 
 
+
+
 function showAdminDashboard() {
+
+
 
 
     stopCamera();
     showPage("adminDashboard");
 
 
+
+
 }
 
 
+
+
 function showQrGenerator() {
+
+
 
 
     showPage("qrGenerator");
     showQrTypeMenu();
 
 
+
+
 }
 
 
+
+
 function showQrTypeMenu() {
+
+
 
 
     document.getElementById("qrTypeMenu").hidden = false;
@@ -1308,10 +1962,16 @@ function showQrTypeMenu() {
     resetQrGeneratorResult();
 
 
+
+
 }
 
 
+
+
 function showQrForm(qrType) {
+
+
 
 
     document.getElementById("qrTypeMenu").hidden = true;
@@ -1321,14 +1981,22 @@ function showQrForm(qrType) {
     resetQrGeneratorResult();
 
 
+
+
 }
+
+
 
 
 function generateStaffQr() {
 
 
+
+
     const staffId = normalizeQrValue(document.getElementById("staffQrId").value);
     const staffName = document.getElementById("staffQrName").value.trim();
+
+
 
 
     if (!staffName || !staffId) {
@@ -1337,17 +2005,27 @@ function generateStaffQr() {
     }
 
 
+
+
     generateQrCode(staffId, staffId + ".png");
+
+
 
 
 }
 
 
+
+
 function generateInventoryQr() {
+
+
 
 
     const sku = normalizeQrValue(document.getElementById("inventoryQrSku").value);
     const itemName = document.getElementById("inventoryQrName").value.trim();
+
+
 
 
     if (!itemName || !sku) {
@@ -1356,20 +2034,32 @@ function generateInventoryQr() {
     }
 
 
+
+
     generateQrCode(sku, sku + ".png");
+
+
 
 
 }
 
 
+
+
 function generateQrCode(qrContent, fileName) {
+
+
 
 
     const qrPreviewCanvas = document.getElementById("qrPreviewCanvas");
 
 
+
+
     try {
         drawQrToCanvas(qrContent, qrPreviewCanvas, 1024);
+
+
 
 
         generatedQrFileName = sanitizeFileName(fileName);
@@ -1381,11 +2071,17 @@ function generateQrCode(qrContent, fileName) {
     }
 
 
+
+
 }
+
+
 
 
 // Local QR encoder for short Staff IDs and SKUs, so kiosk mode does not depend on a CDN.
 function drawQrToCanvas(text, canvas, outputSize) {
+
+
 
 
     const qr = createQrMatrix(text);
@@ -1396,11 +2092,15 @@ function drawQrToCanvas(text, canvas, outputSize) {
     const canvasSize = moduleSize * moduleCount;
 
 
+
+
     canvas.width = canvasSize;
     canvas.height = canvasSize;
     context.fillStyle = "#FFFFFF";
     context.fillRect(0, 0, canvasSize, canvasSize);
     context.fillStyle = "#000000";
+
+
 
 
     for (let y = 0; y < qr.length; y += 1) {
@@ -1417,10 +2117,16 @@ function drawQrToCanvas(text, canvas, outputSize) {
     }
 
 
+
+
 }
 
 
+
+
 function createQrMatrix(text) {
+
+
 
 
     const dataCodewords = createQrDataCodewords(text);
@@ -1429,17 +2135,27 @@ function createQrMatrix(text) {
     const maskPattern = chooseQrMask(codewords);
 
 
+
+
     return buildQrMatrix(codewords, maskPattern);
+
+
 
 
 }
 
 
+
+
 function createQrDataCodewords(text) {
+
+
 
 
     const bytes = textToBytes(text);
     const maxDataBytes = 28;
+
+
 
 
     if (bytes.length > 25) {
@@ -1447,9 +2163,13 @@ function createQrDataCodewords(text) {
     }
 
 
+
+
     const bits = [];
     appendBits(bits, 4, 4);
     appendBits(bits, bytes.length, 8);
+
+
 
 
     bytes.forEach(function(byte) {
@@ -1457,7 +2177,11 @@ function createQrDataCodewords(text) {
     });
 
 
+
+
     appendBits(bits, 0, Math.min(4, maxDataBytes * 8 - bits.length));
+
+
 
 
     while (bits.length % 8 !== 0) {
@@ -1465,7 +2189,11 @@ function createQrDataCodewords(text) {
     }
 
 
+
+
     const dataCodewords = [];
+
+
 
 
     for (let index = 0; index < bits.length; index += 8) {
@@ -1473,7 +2201,11 @@ function createQrDataCodewords(text) {
     }
 
 
+
+
     let padByte = 0xEC;
+
+
 
 
     while (dataCodewords.length < maxDataBytes) {
@@ -1482,18 +2214,28 @@ function createQrDataCodewords(text) {
     }
 
 
+
+
     return dataCodewords;
+
+
 
 
 }
 
 
+
+
 function buildQrMatrix(codewords, maskPattern) {
+
+
 
 
     const size = 25;
     const matrix = createEmptyMatrix(size);
     const reserved = createEmptyMatrix(size);
+
+
 
 
     addFinderPattern(matrix, reserved, 0, 0);
@@ -1507,22 +2249,34 @@ function buildQrMatrix(codewords, maskPattern) {
     addFormatBits(matrix, reserved, maskPattern);
 
 
+
+
     return matrix;
+
+
 
 
 }
 
 
+
+
 function chooseQrMask(codewords) {
+
+
 
 
     let bestMask = 0;
     let bestPenalty = Infinity;
 
 
+
+
     for (let mask = 0; mask < 8; mask += 1) {
         const matrix = buildQrMatrix(codewords, mask);
         const penalty = calculateQrPenalty(matrix);
+
+
 
 
         if (penalty < bestPenalty) {
@@ -1532,13 +2286,21 @@ function chooseQrMask(codewords) {
     }
 
 
+
+
     return bestMask;
+
+
 
 
 }
 
 
+
+
 function addFinderPattern(matrix, reserved, left, top) {
+
+
 
 
     for (let y = -1; y <= 7; y += 1) {
@@ -1547,9 +2309,13 @@ function addFinderPattern(matrix, reserved, left, top) {
             const column = left + x;
 
 
+
+
             if (!isInsideMatrix(matrix, column, row)) {
                 continue;
             }
+
+
 
 
             const isBorder = x === -1 || x === 7 || y === -1 || y === 7;
@@ -1559,16 +2325,24 @@ function addFinderPattern(matrix, reserved, left, top) {
             );
 
 
+
+
             matrix[row][column] = isFinder;
             reserved[row][column] = true;
         }
     }
 
 
+
+
 }
 
 
+
+
 function addAlignmentPattern(matrix, reserved, centerX, centerY) {
+
+
 
 
     for (let y = -2; y <= 2; y += 1) {
@@ -1578,16 +2352,24 @@ function addAlignmentPattern(matrix, reserved, centerX, centerY) {
             const isDark = Math.max(Math.abs(x), Math.abs(y)) !== 1;
 
 
+
+
             matrix[row][column] = isDark;
             reserved[row][column] = true;
         }
     }
 
 
+
+
 }
 
 
+
+
 function addTimingPatterns(matrix, reserved) {
+
+
 
 
     for (let index = 8; index < matrix.length - 8; index += 1) {
@@ -1599,23 +2381,37 @@ function addTimingPatterns(matrix, reserved) {
     }
 
 
+
+
 }
 
 
+
+
 function addDarkModule(matrix, reserved) {
+
+
 
 
     matrix[17][8] = true;
     reserved[17][8] = true;
 
 
+
+
 }
+
+
 
 
 function reserveFormatAreas(reserved) {
 
 
+
+
     const size = reserved.length;
+
+
 
 
     for (let index = 0; index <= 8; index += 1) {
@@ -1626,19 +2422,29 @@ function reserveFormatAreas(reserved) {
     }
 
 
+
+
     for (let index = 0; index < 8; index += 1) {
         reserved[8][size - 1 - index] = true;
         reserved[size - 1 - index][8] = true;
     }
 
 
+
+
 }
+
+
 
 
 function addDataBits(matrix, reserved, codewords, maskPattern) {
 
 
+
+
     const bits = [];
+
+
 
 
     codewords.forEach(function(codeword) {
@@ -1646,8 +2452,12 @@ function addDataBits(matrix, reserved, codewords, maskPattern) {
     });
 
 
+
+
     let bitIndex = 0;
     let upward = true;
+
+
 
 
     for (let right = matrix.length - 1; right >= 1; right -= 2) {
@@ -1656,12 +2466,18 @@ function addDataBits(matrix, reserved, codewords, maskPattern) {
         }
 
 
+
+
         for (let vertical = 0; vertical < matrix.length; vertical += 1) {
             const row = upward ? matrix.length - 1 - vertical : vertical;
 
 
+
+
             for (let offset = 0; offset < 2; offset += 1) {
                 const column = right - offset;
+
+
 
 
                 if (reserved[row][column]) {
@@ -1669,12 +2485,18 @@ function addDataBits(matrix, reserved, codewords, maskPattern) {
                 }
 
 
+
+
                 let isDark = bitIndex < bits.length ? bits[bitIndex] === 1 : false;
+
+
 
 
                 if (getMaskBit(maskPattern, row, column)) {
                     isDark = !isDark;
                 }
+
+
 
 
                 matrix[row][column] = isDark;
@@ -1683,14 +2505,22 @@ function addDataBits(matrix, reserved, codewords, maskPattern) {
         }
 
 
+
+
         upward = !upward;
     }
+
+
 
 
 }
 
 
+
+
 function addFormatBits(matrix, reserved, maskPattern) {
+
+
 
 
     const size = matrix.length;
@@ -1702,6 +2532,8 @@ function addFormatBits(matrix, reserved, maskPattern) {
     ];
 
 
+
+
     const secondPositions = [
         [size - 1, 8], [size - 2, 8], [size - 3, 8], [size - 4, 8],
         [size - 5, 8], [size - 6, 8], [size - 7, 8], [size - 8, 8],
@@ -1710,10 +2542,14 @@ function addFormatBits(matrix, reserved, maskPattern) {
     ];
 
 
+
+
     firstPositions.forEach(function(position, index) {
         matrix[position[1]][position[0]] = ((formatBits >> index) & 1) === 1;
         reserved[position[1]][position[0]] = true;
     });
+
+
 
 
     secondPositions.forEach(function(position, index) {
@@ -1722,15 +2558,23 @@ function addFormatBits(matrix, reserved, maskPattern) {
     });
 
 
+
+
 }
+
+
 
 
 function getFormatBits(maskPattern) {
 
 
+
+
     let data = maskPattern;
     let value = data << 10;
     const generator = 0x537;
+
+
 
 
     for (let bit = 14; bit >= 10; bit -= 1) {
@@ -1740,22 +2584,34 @@ function getFormatBits(maskPattern) {
     }
 
 
+
+
     return ((data << 10) | value) ^ 0x5412;
+
+
 
 
 }
 
 
+
+
 function createReedSolomonCodewords(dataCodewords, errorCodewordCount) {
+
+
 
 
     const generator = createReedSolomonGenerator(errorCodewordCount);
     const result = new Array(errorCodewordCount).fill(0);
 
 
+
+
     dataCodewords.forEach(function(dataCodeword) {
         const factor = dataCodeword ^ result.shift();
         result.push(0);
+
+
 
 
         generator.forEach(function(coefficient, index) {
@@ -1764,16 +2620,26 @@ function createReedSolomonCodewords(dataCodewords, errorCodewordCount) {
     });
 
 
+
+
     return result;
+
+
 
 
 }
 
 
+
+
 function createReedSolomonGenerator(degree) {
 
 
+
+
     let generator = [1];
+
+
 
 
     for (let index = 0; index < degree; index += 1) {
@@ -1781,16 +2647,26 @@ function createReedSolomonGenerator(degree) {
     }
 
 
+
+
     return generator.slice(1);
+
+
 
 
 }
 
 
+
+
 function multiplyPolynomials(left, right) {
 
 
+
+
     const result = new Array(left.length + right.length - 1).fill(0);
+
+
 
 
     for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
@@ -1800,16 +2676,26 @@ function multiplyPolynomials(left, right) {
     }
 
 
+
+
     return result;
+
+
 
 
 }
 
 
+
+
 function gfPow(value, power) {
 
 
+
+
     let result = 1;
+
+
 
 
     for (let index = 0; index < power; index += 1) {
@@ -1817,18 +2703,28 @@ function gfPow(value, power) {
     }
 
 
+
+
     return result;
+
+
 
 
 }
 
 
+
+
 function gfMultiply(left, right) {
+
+
 
 
     let result = 0;
     let a = left;
     let b = right;
+
+
 
 
     while (b > 0) {
@@ -1837,7 +2733,11 @@ function gfMultiply(left, right) {
         }
 
 
+
+
         a <<= 1;
+
+
 
 
         if ((a & 0x100) !== 0) {
@@ -1845,17 +2745,27 @@ function gfMultiply(left, right) {
         }
 
 
+
+
         b >>= 1;
     }
+
+
 
 
     return result & 0xFF;
 
 
+
+
 }
 
 
+
+
 function getMaskBit(maskPattern, row, column) {
+
+
 
 
     if (maskPattern === 0) {
@@ -1863,9 +2773,13 @@ function getMaskBit(maskPattern, row, column) {
     }
 
 
+
+
     if (maskPattern === 1) {
         return row % 2 === 0;
     }
+
+
 
 
     if (maskPattern === 2) {
@@ -1873,9 +2787,13 @@ function getMaskBit(maskPattern, row, column) {
     }
 
 
+
+
     if (maskPattern === 3) {
         return (row + column) % 3 === 0;
     }
+
+
 
 
     if (maskPattern === 4) {
@@ -1883,9 +2801,13 @@ function getMaskBit(maskPattern, row, column) {
     }
 
 
+
+
     if (maskPattern === 5) {
         return ((row * column) % 2) + ((row * column) % 3) === 0;
     }
+
+
 
 
     if (maskPattern === 6) {
@@ -1893,13 +2815,21 @@ function getMaskBit(maskPattern, row, column) {
     }
 
 
+
+
     return (((row + column) % 2) + ((row * column) % 3)) % 2 === 0;
+
+
 
 
 }
 
 
+
+
 function calculateQrPenalty(matrix) {
+
+
 
 
     return calculateRunPenalty(matrix) +
@@ -1908,18 +2838,28 @@ function calculateQrPenalty(matrix) {
         calculateBalancePenalty(matrix);
 
 
+
+
 }
+
+
 
 
 function calculateRunPenalty(matrix) {
 
 
+
+
     let penalty = 0;
+
+
 
 
     for (let y = 0; y < matrix.length; y += 1) {
         penalty += calculateLineRunPenalty(matrix[y]);
     }
+
+
 
 
     for (let x = 0; x < matrix.length; x += 1) {
@@ -1930,18 +2870,28 @@ function calculateRunPenalty(matrix) {
     }
 
 
+
+
     return penalty;
+
+
 
 
 }
 
 
+
+
 function calculateLineRunPenalty(line) {
+
+
 
 
     let penalty = 0;
     let runColor = line[0];
     let runLength = 1;
+
+
 
 
     for (let index = 1; index < line.length; index += 1) {
@@ -1953,10 +2903,14 @@ function calculateLineRunPenalty(line) {
             }
 
 
+
+
             runColor = line[index];
             runLength = 1;
         }
     }
+
+
 
 
     if (runLength >= 5) {
@@ -1964,21 +2918,33 @@ function calculateLineRunPenalty(line) {
     }
 
 
+
+
     return penalty;
+
+
 
 
 }
 
 
+
+
 function calculateBlockPenalty(matrix) {
+
+
 
 
     let penalty = 0;
 
 
+
+
     for (let y = 0; y < matrix.length - 1; y += 1) {
         for (let x = 0; x < matrix.length - 1; x += 1) {
             const color = matrix[y][x];
+
+
 
 
             if (
@@ -1992,21 +2958,33 @@ function calculateBlockPenalty(matrix) {
     }
 
 
+
+
     return penalty;
+
+
 
 
 }
 
 
+
+
 function calculatePatternPenalty(matrix) {
+
+
 
 
     let penalty = 0;
 
 
+
+
     for (let y = 0; y < matrix.length; y += 1) {
         penalty += calculateLinePatternPenalty(matrix[y]);
     }
+
+
 
 
     for (let x = 0; x < matrix.length; x += 1) {
@@ -2017,17 +2995,27 @@ function calculatePatternPenalty(matrix) {
     }
 
 
+
+
     return penalty;
+
+
 
 
 }
 
 
+
+
 function calculateLinePatternPenalty(line) {
+
+
 
 
     let penalty = 0;
     const pattern = [true, false, true, true, true, false, true, false, false, false, false];
+
+
 
 
     for (let index = 0; index <= line.length - pattern.length; index += 1) {
@@ -2036,9 +3024,13 @@ function calculateLinePatternPenalty(line) {
         });
 
 
+
+
         const reverseMatches = pattern.every(function(value, offset) {
             return line[index + offset] === pattern[pattern.length - 1 - offset];
         });
+
+
 
 
         if (matches || reverseMatches) {
@@ -2047,17 +3039,27 @@ function calculateLinePatternPenalty(line) {
     }
 
 
+
+
     return penalty;
+
+
 
 
 }
 
 
+
+
 function calculateBalancePenalty(matrix) {
+
+
 
 
     let darkCount = 0;
     const totalCount = matrix.length * matrix.length;
+
+
 
 
     matrix.forEach(function(row) {
@@ -2069,9 +3071,13 @@ function calculateBalancePenalty(matrix) {
     });
 
 
+
+
     const darkPercent = (darkCount * 100) / totalCount;
     const previousMultiple = Math.floor(darkPercent / 5) * 5;
     const nextMultiple = previousMultiple + 5;
+
+
 
 
     return Math.min(
@@ -2080,14 +3086,22 @@ function calculateBalancePenalty(matrix) {
     ) * 10;
 
 
+
+
 }
+
+
 
 
 function textToBytes(text) {
 
 
+
+
     return text.split("").map(function(character) {
         const code = character.charCodeAt(0);
+
+
 
 
         if (code > 127) {
@@ -2095,14 +3109,22 @@ function textToBytes(text) {
         }
 
 
+
+
         return code;
     });
+
+
 
 
 }
 
 
+
+
 function appendBits(bits, value, length) {
+
+
 
 
     for (let index = length - 1; index >= 0; index -= 1) {
@@ -2110,10 +3132,16 @@ function appendBits(bits, value, length) {
     }
 
 
+
+
 }
 
 
+
+
 function bitsToNumber(bits) {
+
+
 
 
     return bits.reduce(function(value, bit) {
@@ -2121,10 +3149,16 @@ function bitsToNumber(bits) {
     }, 0);
 
 
+
+
 }
 
 
+
+
 function createEmptyMatrix(size) {
+
+
 
 
     return Array.from({ length: size }, function() {
@@ -2132,22 +3166,36 @@ function createEmptyMatrix(size) {
     });
 
 
+
+
 }
+
+
 
 
 function isInsideMatrix(matrix, column, row) {
 
 
+
+
     return row >= 0 && row < matrix.length && column >= 0 && column < matrix.length;
+
+
 
 
 }
 
 
+
+
 function downloadGeneratedQr() {
 
 
+
+
     const qrPreviewCanvas = document.getElementById("qrPreviewCanvas");
+
+
 
 
     if (!generatedQrFileName) {
@@ -2156,16 +3204,24 @@ function downloadGeneratedQr() {
     }
 
 
+
+
     const downloadLink = document.createElement("a");
     downloadLink.href = qrPreviewCanvas.toDataURL("image/png");
     downloadLink.download = generatedQrFileName;
     downloadLink.click();
 
 
+
+
 }
 
 
+
+
 function resetQrGeneratorResult() {
+
+
 
 
     generatedQrFileName = "";
@@ -2175,45 +3231,73 @@ function resetQrGeneratorResult() {
     document.getElementById("qrPreviewLabel").textContent = "";
 
 
+
+
 }
+
+
 
 
 function updateQrGeneratorStatus(message, isError) {
 
 
+
+
     const qrGeneratorStatus = document.getElementById("qrGeneratorStatus");
+
+
 
 
     qrGeneratorStatus.textContent = message;
     qrGeneratorStatus.classList.toggle("error", Boolean(isError));
 
 
+
+
 }
+
+
 
 
 function normalizeQrValue(value) {
 
 
+
+
     return value.trim().toUpperCase().replace(/\s+/g, "");
 
 
+
+
 }
+
+
 
 
 function sanitizeFileName(fileName) {
 
 
+
+
     return fileName.replace(/[^a-z0-9._-]/gi, "_");
+
+
 
 
 }
 
 
+
+
 async function startCamera(shouldStartScanner) {
+
+
 
 
     const cameraPreview = document.getElementById("cameraPreview");
     const cameraFallback = document.getElementById("cameraFallback");
+
+
 
 
     if (!window.isSecureContext && location.hostname !== "localhost") {
@@ -2222,10 +3306,14 @@ async function startCamera(shouldStartScanner) {
     }
 
 
+
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         updateCameraStatus("Browser ini belum bisa membuka kamera.", true);
         return false;
     }
+
+
 
 
     if (cameraStream) {
@@ -2234,17 +3322,25 @@ async function startCamera(shouldStartScanner) {
         cameraFallback.classList.add("hidden");
 
 
+
+
         if (shouldStartScanner) {
             updateCameraStatus("Kamera siap. Arahkan QR kartu karyawan kamu ke kamera.");
             startQrScanner();
         }
 
 
+
+
         return true;
     }
 
 
+
+
     updateCameraStatus("Menyiapkan kamera...");
+
+
 
 
     try {
@@ -2258,10 +3354,14 @@ async function startCamera(shouldStartScanner) {
         });
 
 
+
+
         if (!attendanceIsOpen) {
             stopCamera();
             return false;
         }
+
+
 
 
         cameraPreview.srcObject = cameraStream;
@@ -2270,10 +3370,14 @@ async function startCamera(shouldStartScanner) {
         cameraFallback.classList.add("hidden");
 
 
+
+
         if (shouldStartScanner) {
             updateCameraStatus("Kamera siap. Arahkan QR kartu karyawan kamu ke kamera.");
             startQrScanner();
         }
+
+
 
 
         return true;
@@ -2287,14 +3391,22 @@ async function startCamera(shouldStartScanner) {
     }
 
 
+
+
 }
+
+
 
 
 function stopCamera() {
 
 
+
+
     const cameraPreview = document.getElementById("cameraPreview");
     const cameraFallback = document.getElementById("cameraFallback");
+
+
 
 
     stopQrScanner();
@@ -2305,10 +3417,16 @@ function stopCamera() {
     updateCameraStatus("Kamera belum aktif.");
 
 
+
+
 }
 
 
+
+
 function stopCameraTracks() {
+
+
 
 
     if (cameraStream) {
@@ -2319,10 +3437,16 @@ function stopCameraTracks() {
     }
 
 
+
+
 }
 
 
+
+
 function startQrScanner() {
+
+
 
 
     if (workflowInProgress) {
@@ -2330,10 +3454,14 @@ function startQrScanner() {
     }
 
 
+
+
     if (!("BarcodeDetector" in window)) {
         updateCameraStatus("Kamera siap, tapi scanner QR belum tersedia. Coba update Chrome di tablet ini.", true);
         return;
     }
+
+
 
 
     try {
@@ -2346,37 +3474,57 @@ function startQrScanner() {
     }
 
 
+
+
     qrScanPaused = false;
     scheduleQrScan();
+
+
 
 
 }
 
 
+
+
 function scheduleQrScan() {
+
+
 
 
     if (!attendanceIsOpen || !cameraStream || qrScanPaused || workflowInProgress) {
         return;
     }
+
+
 
 
     clearQrScanTimer();
     qrScanTimeoutId = window.setTimeout(scanQrCode, QR_SCAN_DELAY_MS);
 
 
+
+
 }
+
+
 
 
 async function scanQrCode() {
 
 
+
+
     const cameraPreview = document.getElementById("cameraPreview");
+
+
 
 
     if (!attendanceIsOpen || !cameraStream || qrScanPaused || workflowInProgress) {
         return;
     }
+
+
 
 
     if (cameraPreview.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
@@ -2385,12 +3533,18 @@ async function scanQrCode() {
     }
 
 
+
+
     try {
         const barcodes = await qrDetector.detect(cameraPreview);
 
 
+
+
         if (barcodes.length > 0) {
             const qrValue = barcodes[0].rawValue.trim();
+
+
 
 
             if (!isRapidDuplicateQr(qrValue)) {
@@ -2403,16 +3557,26 @@ async function scanQrCode() {
     }
 
 
+
+
     scheduleQrScan();
+
+
 
 
 }
 
 
+
+
 async function handleQrCode(qrValue) {
 
 
+
+
     const localStaff = STAFF_MEMBERS[qrValue];
+
+
 
 
     if (!localStaff) {
@@ -2422,19 +3586,27 @@ async function handleQrCode(qrValue) {
     }
 
 
+
+
     workflowInProgress = true;
     qrScanPaused = true;
     stopQrScanner();
     updateCameraStatus("Memeriksa data absensi...");
 
 
+
+
     try {
         const attendanceDecision = await getAttendanceDecision(localStaff);
+
+
 
 
         if (!isCurrentWorkflow(workflowRunId)) {
             return;
         }
+
+
 
 
         if (attendanceDecision.status === "complete") {
@@ -2445,6 +3617,8 @@ async function handleQrCode(qrValue) {
         }
 
 
+
+
         runSelfieWorkflow(attendanceDecision.staff, attendanceDecision.status);
     } catch (error) {
         workflowInProgress = false;
@@ -2453,13 +3627,21 @@ async function handleQrCode(qrValue) {
     }
 
 
+
+
 }
+
+
 
 
 async function runSelfieWorkflow(staff, attendanceStatus) {
 
 
+
+
     const currentRunId = workflowRunId;
+
+
 
 
     showTransitionMessage(staff);
@@ -2467,15 +3649,23 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
     await delay(MESSAGE_DISPLAY_DELAY_MS);
 
 
+
+
     if (!isCurrentWorkflow(currentRunId)) {
         return;
     }
 
 
+
+
     showSelfieScreen();
 
 
+
+
     const cameraReady = await startCamera(false);
+
+
 
 
     if (!cameraReady) {
@@ -2484,8 +3674,12 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
     }
 
 
+
+
     try {
         await runCountdown(currentRunId);
+
+
 
 
         if (!isCurrentWorkflow(currentRunId)) {
@@ -2493,14 +3687,20 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
         }
 
 
+
+
         const selfieDataUrl = captureSelfie();
         const saveResult = await saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl);
+
+
 
 
         if (!saveResult.saved) {
             handleSelfieFailure("Absensi belum bisa disimpan. Coba scan ulang.");
             return;
         }
+
+
 
 
         showAttendanceSuccess(staff, attendanceStatus);
@@ -2510,16 +3710,26 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
     }
 
 
+
+
 }
+
+
 
 
 async function runCountdown(currentRunId) {
 
 
+
+
     const countdownOverlay = document.getElementById("countdownOverlay");
 
 
+
+
     countdownOverlay.hidden = false;
+
+
 
 
     for (let count = 3; count >= 1; count -= 1) {
@@ -2529,28 +3739,42 @@ async function runCountdown(currentRunId) {
         }
 
 
+
+
         countdownOverlay.textContent = count + "...";
         updateCameraStatus("Tetap diam. Foto otomatis segera diambil.");
         await delay(COUNTDOWN_DELAY_MS);
     }
 
 
+
+
     countdownOverlay.hidden = true;
+
+
 
 
 }
 
 
+
+
 function captureSelfie() {
+
+
 
 
     const cameraPreview = document.getElementById("cameraPreview");
     const selfieCanvas = document.getElementById("selfieCanvas");
 
 
+
+
     if (!cameraStream || !cameraPreview.videoWidth || !cameraPreview.videoHeight) {
         throw new Error("Selfie camera is not ready.");
     }
+
+
 
 
     const maxWidth = 640;
@@ -2559,11 +3783,17 @@ function captureSelfie() {
     selfieCanvas.height = Math.round(cameraPreview.videoHeight * scale);
 
 
+
+
     const canvasContext = selfieCanvas.getContext("2d");
     canvasContext.drawImage(cameraPreview, 0, 0, selfieCanvas.width, selfieCanvas.height);
 
 
+
+
     const selfieDataUrl = selfieCanvas.toDataURL("image/jpeg", 0.8);
+
+
 
 
     if (!selfieDataUrl || selfieDataUrl === "data:,") {
@@ -2571,18 +3801,28 @@ function captureSelfie() {
     }
 
 
+
+
     return selfieDataUrl;
+
+
 
 
 }
 
 
+
+
 function handleSelfieFailure(message) {
+
+
 
 
     if (!attendanceIsOpen) {
         return;
     }
+
+
 
 
     workflowInProgress = false;
@@ -2593,20 +3833,32 @@ function handleSelfieFailure(message) {
     startCamera(true);
 
 
+
+
 }
 
 
+
+
 function stopQrScanner() {
+
+
 
 
     qrScanPaused = true;
     clearQrScanTimer();
 
 
+
+
 }
 
 
+
+
 function clearQrScanTimer() {
+
+
 
 
     if (qrScanTimeoutId) {
@@ -2615,13 +3867,21 @@ function clearQrScanTimer() {
     }
 
 
+
+
 }
+
+
 
 
 function isRapidDuplicateQr(qrValue) {
 
 
+
+
     const now = Date.now();
+
+
 
 
     if (qrValue === lastQrValue && now - lastQrReadAt < DUPLICATE_SCAN_DELAY_MS) {
@@ -2629,15 +3889,23 @@ function isRapidDuplicateQr(qrValue) {
     }
 
 
+
+
     lastQrValue = qrValue;
     lastQrReadAt = now;
     return false;
 
 
+
+
 }
 
 
+
+
 function resetAttendanceScreen() {
+
+
 
 
     resetQrResult();
@@ -2647,10 +3915,16 @@ function resetAttendanceScreen() {
     updateCameraStatus("Kamera belum aktif.");
 
 
+
+
 }
 
 
+
+
 function showScanningScreen() {
+
+
 
 
     document.getElementById("attendanceInstruction").hidden = false;
@@ -2660,10 +3934,16 @@ function showScanningScreen() {
     hideWorkflowPanel();
 
 
+
+
 }
 
 
+
+
 function showTransitionMessage(staff) {
+
+
 
 
     hideScanningScreen();
@@ -2674,10 +3954,16 @@ function showTransitionMessage(staff) {
     );
 
 
+
+
 }
 
 
+
+
 function showSelfieScreen() {
+
+
 
 
     document.getElementById("attendanceInstruction").hidden = true;
@@ -2689,10 +3975,16 @@ function showSelfieScreen() {
     updateCameraStatus("Mohon lihat ke kamera.");
 
 
+
+
 }
 
 
+
+
 function hideScanningScreen() {
+
+
 
 
     document.getElementById("attendanceInstruction").hidden = true;
@@ -2703,10 +3995,16 @@ function hideScanningScreen() {
     document.getElementById("countdownOverlay").hidden = true;
 
 
+
+
 }
 
 
+
+
 function showWorkflowPanel(name, title, text) {
+
+
 
 
     document.getElementById("workflowName").textContent = name;
@@ -2715,19 +4013,31 @@ function showWorkflowPanel(name, title, text) {
     document.getElementById("workflowPanel").hidden = false;
 
 
+
+
 }
+
+
 
 
 function hideWorkflowPanel() {
 
 
+
+
     document.getElementById("workflowPanel").hidden = true;
+
+
 
 
 }
 
 
+
+
 function resetQrResult() {
+
+
 
 
     qrScanPaused = false;
@@ -2737,14 +4047,22 @@ function resetQrResult() {
     document.getElementById("qrResult").hidden = true;
 
 
+
+
 }
+
+
 
 
 function showAttendanceSuccess(staff, attendanceStatus) {
 
 
+
+
     stopCamera();
     hideScanningScreen();
+
+
 
 
     if (attendanceStatus === "check-in") {
@@ -2757,6 +4075,8 @@ function showAttendanceSuccess(staff, attendanceStatus) {
     }
 
 
+
+
     showWorkflowPanel(
         "",
         "✅ Check-out berhasil",
@@ -2764,10 +4084,16 @@ function showAttendanceSuccess(staff, attendanceStatus) {
     );
 
 
+
+
 }
 
 
+
+
 function showAttendanceComplete(staff) {
+
+
 
 
     hideScanningScreen();
@@ -2778,10 +4104,16 @@ function showAttendanceComplete(staff) {
     );
 
 
+
+
 }
 
 
+
+
 function scheduleReturnHome() {
+
+
 
 
     clearAutoReturnTimer();
@@ -2792,10 +4124,16 @@ function scheduleReturnHome() {
     }, SUCCESS_MESSAGE_DURATION_MS);
 
 
+
+
 }
 
 
+
+
 function clearAutoReturnTimer() {
+
+
 
 
     if (autoReturnTimeoutId) {
@@ -2804,10 +4142,16 @@ function clearAutoReturnTimer() {
     }
 
 
+
+
 }
 
 
+
+
 async function getAttendanceDecision(localStaff) {
+
+
 
 
     if (!isGoogleSheetsConfigured()) {
@@ -2818,7 +4162,11 @@ async function getAttendanceDecision(localStaff) {
     }
 
 
+
+
     let response;
+
+
 
 
     try {
@@ -2834,9 +4182,13 @@ async function getAttendanceDecision(localStaff) {
     }
 
 
+
+
     if (!response.ok) {
         throw new Error(response.message || "Attendance status failed.");
     }
+
+
 
 
     return {
@@ -2848,10 +4200,16 @@ async function getAttendanceDecision(localStaff) {
     };
 
 
+
+
 }
 
 
+
+
 function getLocalAttendanceStatus(employeeId) {
+
+
 
 
     const todayKey = getTodayKey();
@@ -2859,9 +4217,13 @@ function getLocalAttendanceStatus(employeeId) {
     const employeeRecord = attendanceDrafts[todayKey] && attendanceDrafts[todayKey][employeeId];
 
 
+
+
     if (!employeeRecord || !employeeRecord.checkInAt) {
         return "check-in";
     }
+
+
 
 
     if (!employeeRecord.checkOutAt) {
@@ -2869,18 +4231,28 @@ function getLocalAttendanceStatus(employeeId) {
     }
 
 
+
+
     return "complete";
+
+
 
 
 }
 
 
+
+
 async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
+
+
 
 
     if (!selfieDataUrl) {
         return { saved: false };
     }
+
+
 
 
     if (isGoogleSheetsConfigured()) {
@@ -2893,7 +4265,11 @@ async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
         };
 
 
+
+
         let response;
+
+
 
 
         try {
@@ -2903,23 +4279,35 @@ async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
         }
 
 
+
+
         if (!response.ok) {
             return { saved: false };
         }
     }
 
 
+
+
     return saveLocalAttendanceRecord(staff, attendanceStatus);
+
+
 
 
 }
 
 
+
+
 function saveLocalAttendanceRecord(staff, attendanceStatus) {
+
+
 
 
     const todayKey = getTodayKey();
     const attendanceDrafts = getAttendanceDrafts();
+
+
 
 
     if (!attendanceDrafts[todayKey]) {
@@ -2927,8 +4315,12 @@ function saveLocalAttendanceRecord(staff, attendanceStatus) {
     }
 
 
+
+
     const employeeRecord = attendanceDrafts[todayKey][staff.id] || {};
     const now = new Date().toISOString();
+
+
 
 
     if (attendanceStatus === "check-in") {
@@ -2937,10 +4329,14 @@ function saveLocalAttendanceRecord(staff, attendanceStatus) {
         }
 
 
+
+
         employeeRecord.staffName = staff.name;
         employeeRecord.checkInAt = now;
         employeeRecord.checkInSelfieCapturedAt = now;
     }
+
+
 
 
     if (attendanceStatus === "check-out") {
@@ -2949,22 +4345,34 @@ function saveLocalAttendanceRecord(staff, attendanceStatus) {
         }
 
 
+
+
         employeeRecord.staffName = staff.name;
         employeeRecord.checkOutAt = now;
         employeeRecord.checkOutSelfieCapturedAt = now;
     }
 
 
+
+
     attendanceDrafts[todayKey][staff.id] = employeeRecord;
+
+
 
 
     return saveAttendanceDrafts(attendanceDrafts);
 
 
+
+
 }
 
 
+
+
 function sendGoogleSheetsWriteFallback(params) {
+
+
 
 
     return new Promise(function(resolve) {
@@ -2975,16 +4383,22 @@ function sendGoogleSheetsWriteFallback(params) {
         }, SHEETS_WRITE_FALLBACK_TIMEOUT_MS);
 
 
+
+
         function finish(response) {
             if (isDone) {
                 return;
             }
 
 
+
+
             isDone = true;
             window.clearTimeout(timeoutId);
             resolve(response);
         }
+
+
 
 
         if (window.fetch) {
@@ -3001,17 +4415,27 @@ function sendGoogleSheetsWriteFallback(params) {
         }
 
 
+
+
         sendGoogleSheetsImageFallback(requestUrl, finish);
     });
+
+
 
 
 }
 
 
+
+
 function sendGoogleSheetsImageFallback(requestUrl, finish) {
 
 
+
+
     const image = new Image();
+
+
 
 
     image.onload = function() {
@@ -3019,18 +4443,28 @@ function sendGoogleSheetsImageFallback(requestUrl, finish) {
     };
 
 
+
+
     image.onerror = function() {
         finish({ ok: true });
     };
 
 
+
+
     image.src = requestUrl;
+
+
 
 
 }
 
 
+
+
 function callGoogleSheets(params) {
+
+
 
 
     return new Promise(function(resolve, reject) {
@@ -3042,9 +4476,13 @@ function callGoogleSheets(params) {
         }, SHEETS_REQUEST_TIMEOUT_MS);
 
 
+
+
         function cleanup() {
             window.clearTimeout(timeoutId);
             delete window[callbackName];
+
+
 
 
             if (script.parentNode) {
@@ -3053,10 +4491,14 @@ function callGoogleSheets(params) {
         }
 
 
+
+
         window[callbackName] = function(response) {
             cleanup();
             resolve(response);
         };
+
+
 
 
         script.src = buildGoogleSheetsUrl(params, callbackName);
@@ -3068,13 +4510,21 @@ function callGoogleSheets(params) {
     });
 
 
+
+
 }
+
+
 
 
 function buildGoogleSheetsUrl(params, callbackName) {
 
 
+
+
     const searchParams = new URLSearchParams(params);
+
+
 
 
     if (callbackName) {
@@ -3082,34 +4532,56 @@ function buildGoogleSheetsUrl(params, callbackName) {
     }
 
 
+
+
     searchParams.set("requestTime", String(Date.now()));
+
+
 
 
     return GOOGLE_APPS_SCRIPT_URL + "?" + searchParams.toString();
 
 
+
+
 }
+
+
 
 
 function isGoogleSheetsConfigured() {
 
 
+
+
     return GOOGLE_APPS_SCRIPT_URL.indexOf("https://script.google.com/") === 0;
 
 
+
+
 }
+
+
 
 
 function getDeviceLabel() {
 
 
+
+
     return "PADOVA Terminal";
+
+
 
 
 }
 
 
+
+
 function getTodayKey() {
+
+
 
 
     const today = new Date();
@@ -3118,13 +4590,21 @@ function getTodayKey() {
     const day = String(today.getDate()).padStart(2, "0");
 
 
+
+
     return year + "-" + month + "-" + day;
+
+
 
 
 }
 
 
+
+
 function getAttendanceDrafts() {
+
+
 
 
     try {
@@ -3134,10 +4614,16 @@ function getAttendanceDrafts() {
     }
 
 
+
+
 }
 
 
+
+
 function saveAttendanceDrafts(attendanceDrafts) {
+
+
 
 
     try {
@@ -3148,23 +4634,37 @@ function saveAttendanceDrafts(attendanceDrafts) {
     }
 
 
+
+
 }
+
+
 
 
 function updateCameraStatus(message, isError) {
 
 
+
+
     const cameraStatus = document.getElementById("cameraStatus");
+
+
 
 
     cameraStatus.textContent = message;
     cameraStatus.classList.toggle("error", Boolean(isError));
 
 
+
+
 }
 
 
+
+
 function getCameraErrorMessage(error) {
+
+
 
 
     if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
@@ -3172,9 +4672,13 @@ function getCameraErrorMessage(error) {
     }
 
 
+
+
     if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
         return "Kamera tidak ditemukan di tablet ini.";
     }
+
+
 
 
     if (location.protocol !== "https:" && location.hostname !== "localhost") {
@@ -3182,22 +4686,36 @@ function getCameraErrorMessage(error) {
     }
 
 
+
+
     return "Kamera belum bisa dibuka. Coba muat ulang halaman ini.";
 
 
+
+
 }
+
+
 
 
 function isCurrentWorkflow(currentRunId) {
 
 
+
+
     return attendanceIsOpen && workflowInProgress && workflowRunId === currentRunId;
+
+
 
 
 }
 
 
+
+
 function waitForScreenRender() {
+
+
 
 
     return new Promise(function(resolve) {
@@ -3207,15 +4725,23 @@ function waitForScreenRender() {
     });
 
 
+
+
 }
+
+
 
 
 function delay(milliseconds) {
 
 
+
+
     return new Promise(function(resolve) {
         window.setTimeout(resolve, milliseconds);
     });
+
+
 
 
 }
