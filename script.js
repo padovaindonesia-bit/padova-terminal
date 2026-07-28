@@ -467,6 +467,7 @@ async function handleStockQrCode(qrValue) {
 
 
 
+    console.log("[Stock Debug] scanned item code:", itemCode);
     stockScanPaused = true;
     stopStockQrScanner();
     updateStockStatus("Mencari data barang...");
@@ -574,7 +575,10 @@ async function getStockItemFromSheets(itemCode) {
 
 
         if (!response.ok) {
-            throw { code: response.code || "not-found" };
+            throw {
+                code: response.code || "not-found",
+                fromSheetsResponse: true
+            };
         }
 
 
@@ -601,15 +605,25 @@ async function getStockItemFromSheets(itemCode) {
 
 
 
+        console.log("[Stock Debug] matched item code:", item.code);
+        console.log("[Stock Debug] Google Sheets stock value:", response.item.currentStock);
         cacheStockItem(item);
         return item;
     } catch (error) {
+        if (error.fromSheetsResponse) {
+            throw error;
+        }
+
+
+
+
         const cachedItem = getCachedStockItem(itemCode);
 
 
 
 
         if (cachedItem) {
+            console.warn("[Stock Debug] using cached stock item:", cachedItem.code, cachedItem.stock);
             return cachedItem;
         }
 
@@ -760,6 +774,7 @@ function showStockItemScreen(item) {
 
 
 
+    console.log("[Stock Debug] value sent to UI:", item.code, item.stockAvailable ? item.stock : "Stock tidak tersedia (Offline)");
     document.getElementById("stockInstruction").hidden = true;
     document.getElementById("stockCameraBox").hidden = true;
     document.getElementById("stockStatus").hidden = false;
@@ -1549,23 +1564,7 @@ function updateCachedStockAfterMovement(item, stockAfter) {
 
 
 
-    if (stockAfter === "" || stockAfter === null || stockAfter === undefined) {
-        return item;
-    }
-
-
-
-
-    const nextItem = Object.assign({}, item, {
-        stock: Number(stockAfter),
-        stockAvailable: true
-    });
-
-
-
-
-    cacheStockItem(nextItem);
-    return nextItem;
+    return item;
 
 
 
@@ -1593,6 +1592,14 @@ function getCachedStockItem(itemCode) {
 
 
 
+    if (cachedItem.cacheSource !== "sheets") {
+        console.warn("[Stock Debug] ignoring untrusted cached stock item:", itemCode, cachedItem.stock);
+        return null;
+    }
+
+
+
+
     return cachedItem;
 
 
@@ -1609,7 +1616,10 @@ function cacheStockItem(item) {
 
 
     const cache = getStockCache();
-    cache[item.code] = item;
+    cache[item.code] = Object.assign({}, item, {
+        cacheSource: "sheets",
+        cachedAt: new Date().toISOString()
+    });
     localStorage.setItem(STOCK_CACHE_STORAGE_KEY, JSON.stringify(cache));
 
 
