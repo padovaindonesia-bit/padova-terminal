@@ -1,0 +1,47 @@
+function goHome() {
+
+
+
+
+    attendanceIsOpen = false;
+    workflowInProgress = false;
+    workflowRunId += 1;
+    pendingEarlyCheckoutStaff = null;
+    clearAutoReturnTimer();
+    clearStockReturnTimer();
+    closeAdminPinDialog();
+    stopCamera();
+    stopStockCamera();
+    showPage("home");
+
+
+
+
+}
+
+
+
+
+function showPage(pageId) {
+
+
+
+
+    document.querySelectorAll(".page").forEach(function(page) {
+        page.classList.remove("active");
+    });
+
+
+
+
+    document.getElementById(pageId).classList.add("active");
+
+
+
+
+}
+
+
+setupAdminPinInput();
+setupStockAutoSync();
+setupStockQuantityControls();

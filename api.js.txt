@@ -1,0 +1,212 @@
+function sendGoogleSheetsWriteFallback(service, params) {
+
+
+
+
+    return new Promise(function(resolve) {
+        let isDone = false;
+        const requestUrl = buildGoogleSheetsUrl(service, params);
+        const timeoutId = window.setTimeout(function() {
+            finish({ ok: false });
+        }, SHEETS_WRITE_FALLBACK_TIMEOUT_MS);
+
+
+
+
+        function finish(response) {
+            if (isDone) {
+                return;
+            }
+
+
+
+
+            isDone = true;
+            window.clearTimeout(timeoutId);
+            resolve(response);
+        }
+
+
+
+
+        if (window.fetch) {
+            fetch(requestUrl, {
+                method: "GET",
+                mode: "no-cors",
+                cache: "no-store"
+            }).then(function() {
+                finish({ ok: true });
+            }).catch(function() {
+                sendGoogleSheetsImageFallback(requestUrl, finish);
+            });
+            return;
+        }
+
+
+
+
+        sendGoogleSheetsImageFallback(requestUrl, finish);
+    });
+
+
+
+
+}
+
+
+
+
+function sendGoogleSheetsImageFallback(requestUrl, finish) {
+
+
+
+
+    const image = new Image();
+
+
+
+
+    image.onload = function() {
+        finish({ ok: true });
+    };
+
+
+
+
+    image.onerror = function() {
+        finish({ ok: true });
+    };
+
+
+
+
+    image.src = requestUrl;
+
+
+
+
+}
+
+
+
+
+function callGoogleSheets(service, params) {
+
+
+
+
+    return new Promise(function(resolve, reject) {
+        const callbackName = "padovaSheetsCallback" + Date.now() + Math.floor(Math.random() * 10000);
+        const script = document.createElement("script");
+        const timeoutId = window.setTimeout(function() {
+            cleanup();
+            reject(new Error("Google Sheets request timed out."));
+        }, SHEETS_REQUEST_TIMEOUT_MS);
+
+
+
+
+        function cleanup() {
+            window.clearTimeout(timeoutId);
+            delete window[callbackName];
+
+
+
+
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        }
+
+
+
+
+        window[callbackName] = function(response) {
+            cleanup();
+            resolve(response);
+        };
+
+
+
+
+        script.src = buildGoogleSheetsUrl(service, params, callbackName);
+        script.onerror = function() {
+            cleanup();
+            reject(new Error("Google Sheets request failed."));
+        };
+        document.body.appendChild(script);
+    });
+
+
+
+
+}
+
+
+
+
+function buildGoogleSheetsUrl(service, params, callbackName) {
+
+    const serviceUrl = APPS_SCRIPT_URLS[service];
+
+    if (!serviceUrl || serviceUrl.indexOf("https://script.google.com/") !== 0) {
+        throw new Error("Google Sheets service tidak valid: " + service);
+    }
+
+
+
+
+    const searchParams = new URLSearchParams(params);
+
+
+
+
+    if (callbackName) {
+        searchParams.set("callback", callbackName);
+    }
+
+
+
+
+    searchParams.set("requestTime", String(Date.now()));
+
+
+
+
+    return serviceUrl + "?" + searchParams.toString();
+
+
+
+
+}
+
+
+
+
+function isGoogleSheetsConfigured(service) {
+    return typeof APPS_SCRIPT_URLS[service] === "string" &&
+        APPS_SCRIPT_URLS[service].indexOf("https://script.google.com/") === 0;
+
+
+
+
+}
+
+
+
+
+function getDeviceLabel() {
+
+
+
+
+    return "PADOVA Terminal";
+
+
+
+
+}
+
+
+
+
