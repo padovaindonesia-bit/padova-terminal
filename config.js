@@ -31,6 +31,10 @@ const STAFF_MEMBERS = {
     "PDV-S006": {
         id: "PDV-S006",
         name: "SANTUNG"
+    },
+    "PDV-S007": {
+        id: "PDV-S007",
+        name: "NATASSYA"
     }
 };
 
