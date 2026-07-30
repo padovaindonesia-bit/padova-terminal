@@ -1,5 +1,5 @@
 const APPS_SCRIPT_URLS = {
-    attendance: "https://script.google.com/macros/s/AKfycbzViTCf7hj7vLsCB5E7XBCHR7iesm3pXyk33Bd9u8vikUC_afdIUbGSveXJ5SB1NP3P/exec",
+    attendance: "https://script.google.com/macros/s/AKfycbw9D17O4_M4JT2fDiJRHmHdvjWgqtri8p8SG9YR1jNrQ8HWCi8E0GEwFO1-bToPhsE1/exec",
     inventory: "https://script.google.com/macros/s/AKfycbyg08AuPsjQwEx1QYcM3rPBJQu1gjWt9HvkrB6c0hoVOmj8iQ5UAMkXwq0pQuT3yPqJsw/exec"
 };
 const ADMIN_PIN = "1234";
@@ -3625,7 +3625,7 @@ async function handleQrCode(qrValue) {
 
 
 
-        if (attendanceDecision.action === "check_in_recorded") {
+        if (attendanceDecision.action === "already_checked_in" || attendanceDecision.action === "check_in_recorded") {
             stopCamera();
             showAttendanceCheckInRecorded(attendanceDecision);
             scheduleReturnHome();
@@ -3643,7 +3643,7 @@ async function handleQrCode(qrValue) {
 
 
 
-        if (attendanceDecision.status === "complete" || attendanceDecision.action === "complete") {
+        if (attendanceDecision.status === "complete" || attendanceDecision.action === "attendance_complete" || attendanceDecision.action === "complete") {
             stopCamera();
             showAttendanceComplete(attendanceDecision.staff);
             scheduleReturnHome();
@@ -3914,7 +3914,7 @@ async function verifyAttendanceSaveResult(staff, attendanceStatus) {
 
 
         return {
-            saved: hasAttendanceStatusAdvanced(attendanceStatus, response.nextStatus),
+            saved: hasAttendanceStatusAdvanced(attendanceStatus, response.nextStatus, response.action),
             uncertain: false,
             staff: verifiedStaff
         };
@@ -3934,20 +3934,20 @@ async function verifyAttendanceSaveResult(staff, attendanceStatus) {
 
 
 
-function hasAttendanceStatusAdvanced(attendanceStatus, nextStatus) {
+function hasAttendanceStatusAdvanced(attendanceStatus, nextStatus, action) {
 
 
 
 
     if (attendanceStatus === "check-in") {
-        return nextStatus === "check-out" || nextStatus === "complete";
+        return action === "already_checked_in" || action === "check_in_recorded" || action === "attendance_complete" || action === "complete" || nextStatus === "check-out" || nextStatus === "complete";
     }
 
 
 
 
     if (attendanceStatus === "check-out") {
-        return nextStatus === "complete";
+        return action === "attendance_complete" || action === "complete" || nextStatus === "complete";
     }
 
 
@@ -4209,6 +4209,37 @@ function hideAttendanceConfirmActions() {
 
 
 
+function getAttendanceConfirmActions() {
+
+
+
+
+    let attendanceConfirmActions = document.getElementById("attendanceConfirmActions");
+
+
+
+
+    if (!attendanceConfirmActions) {
+        attendanceConfirmActions = document.createElement("div");
+        attendanceConfirmActions.id = "attendanceConfirmActions";
+        attendanceConfirmActions.hidden = true;
+        attendanceConfirmActions.innerHTML = '<button type="button" class="primaryButton" onclick="confirmEarlyCheckout()">Ya</button><button type="button" class="secondaryButton" onclick="cancelEarlyCheckout()">Batal</button>';
+        document.getElementById("workflowPanel").appendChild(attendanceConfirmActions);
+    }
+
+
+
+
+    return attendanceConfirmActions;
+
+
+
+
+}
+
+
+
+
 function resetQrResult() {
 
 
@@ -4318,7 +4349,7 @@ function showEarlyCheckoutConfirmation(staff) {
         "Kamu sudah check-in hari ini.",
         "Apakah kamu yakin ingin melakukan CHECK-OUT sekarang?"
     );
-    document.getElementById("attendanceConfirmActions").hidden = false;
+    getAttendanceConfirmActions().hidden = false;
 
 
 
@@ -4477,7 +4508,7 @@ async function getAttendanceDecision(localStaff) {
             id: response.staff.id,
             name: response.staff.name
         },
-        status: response.nextStatus,
+        status: response.status || response.nextStatus,
         action: response.action || response.nextStatus,
         message: response.message || "",
         checkInTime: response.checkInTime || "",
