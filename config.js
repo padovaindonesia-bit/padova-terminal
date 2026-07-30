@@ -1,5 +1,5 @@
 ﻿const APPS_SCRIPT_URLS = {
-    attendance: "https://script.google.com/macros/s/AKfycbzq0jysQ1_vrEG3empyB0ldi3y4zMMPLxUgiU5UERKLSklCkqV2k84mMLdtBLFppx48/exec",
+    attendance: "https://script.google.com/macros/s/AKfycbxrOBht69wqOIc0Je0Xc2zN1LbT0UJhDftaOuQXmzEFWCVQFZaNuke5AC_hPt0BNrYg/exec",
     inventory: "https://script.google.com/macros/s/AKfycbyflKhUe5VCoR3m9FJnlIQRp5BeQBXmKywBC2lhGniO3VMHiO7UZ0kCrjONFmv_6gor0g/exec"
 };
 const ADMIN_PIN = "1234";
