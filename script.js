@@ -1,4 +1,7 @@
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyebliy1LZWyuNMl_ZiY52M9JHUxO7dY_cmIeNzN41Vxgk3rsGXPh3xn9io75m73eEI/exec";
+const APPS_SCRIPT_URLS = {
+    attendance: "https://script.google.com/macros/s/AKfycbzViTCf7hj7vLsCB5E7XBCHR7iesm3pXyk33Bd9u8vikUC_afdIUbGSveXJ5SB1NP3P/exec",
+    inventory: "https://script.google.com/macros/s/AKfycbyg08AuPsjQwEx1QYcM3rPBJQu1gjWt9HvkrB6c0hoVOmj8iQ5UAMkXwq0pQuT3yPqJsw/exec"
+};
 const ADMIN_PIN = "1234";
 
 
@@ -77,6 +80,7 @@ let workflowRunId = 0;
 let autoReturnTimeoutId = null;
 let lastQrValue = "";
 let lastQrReadAt = 0;
+let pendingEarlyCheckoutStaff = null;
 let adminLogoTapCount = 0;
 let adminLogoTapTimeoutId = null;
 let generatedQrFileName = "";
@@ -112,6 +116,7 @@ function showAttendance() {
     attendanceIsOpen = true;
     workflowInProgress = false;
     workflowRunId += 1;
+    pendingEarlyCheckoutStaff = null;
     clearAutoReturnTimer();
     showPage("attendance");
     resetAttendanceScreen();
@@ -133,6 +138,7 @@ function goHome() {
     attendanceIsOpen = false;
     workflowInProgress = false;
     workflowRunId += 1;
+    pendingEarlyCheckoutStaff = null;
     clearAutoReturnTimer();
     clearStockReturnTimer();
     closeAdminPinDialog();
@@ -546,7 +552,7 @@ async function getStockItemFromSheets(itemCode) {
 
 
 
-    if (!isGoogleSheetsConfigured()) {
+    if (!isGoogleSheetsConfigured("inventory")) {
         const cachedItem = getCachedStockItem(itemCode);
 
 
@@ -566,7 +572,7 @@ async function getStockItemFromSheets(itemCode) {
 
 
     try {
-        const response = await callGoogleSheets({
+        const response = await callGoogleSheets("inventory", {
             action: "stockItem",
             itemCode: itemCode
         });
@@ -1177,7 +1183,7 @@ async function saveStockMovement(item, actionType, quantity, staff) {
 
 
 
-    if (!isGoogleSheetsConfigured() || !navigator.onLine) {
+    if (!isGoogleSheetsConfigured("inventory") || !navigator.onLine) {
         return queueStockMovement(transaction);
     }
 
@@ -1185,7 +1191,7 @@ async function saveStockMovement(item, actionType, quantity, staff) {
 
 
     try {
-        const response = await callGoogleSheets(Object.assign({
+        const response = await callGoogleSheets("inventory", Object.assign({
             action: "stockRecord"
         }, transaction));
 
@@ -1489,7 +1495,7 @@ async function syncPendingStockMovements() {
 
 
 
-    if (stockSyncInProgress || !isGoogleSheetsConfigured() || !navigator.onLine) {
+    if (stockSyncInProgress || !isGoogleSheetsConfigured("inventory") || !navigator.onLine) {
         return;
     }
 
@@ -1527,7 +1533,7 @@ async function syncPendingStockMovements() {
 
 
             try {
-                const response = await callGoogleSheets(Object.assign({
+                const response = await callGoogleSheets("inventory", Object.assign({
                     action: "stockRecord"
                 }, transaction));
 
@@ -3619,7 +3625,25 @@ async function handleQrCode(qrValue) {
 
 
 
-        if (attendanceDecision.status === "complete") {
+        if (attendanceDecision.action === "check_in_recorded") {
+            stopCamera();
+            showAttendanceCheckInRecorded(attendanceDecision);
+            scheduleReturnHome();
+            return;
+        }
+
+
+
+
+        if (attendanceDecision.action === "confirm_early_checkout") {
+            showEarlyCheckoutConfirmation(attendanceDecision.staff);
+            return;
+        }
+
+
+
+
+        if (attendanceDecision.status === "complete" || attendanceDecision.action === "complete") {
             stopCamera();
             showAttendanceComplete(attendanceDecision.staff);
             scheduleReturnHome();
@@ -3644,7 +3668,7 @@ async function handleQrCode(qrValue) {
 
 
 
-async function runSelfieWorkflow(staff, attendanceStatus) {
+async function runSelfieWorkflow(staff, attendanceStatus, saveOptions) {
 
 
 
@@ -3700,7 +3724,7 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
 
 
         const selfieDataUrl = captureSelfie();
-        const saveResult = await saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl);
+        const saveResult = await saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl, saveOptions);
 
 
 
@@ -3850,7 +3874,7 @@ async function verifyAttendanceSaveResult(staff, attendanceStatus) {
 
 
 
-    if (!isGoogleSheetsConfigured()) {
+    if (!isGoogleSheetsConfigured("attendance")) {
         return {
             saved: false,
             uncertain: false,
@@ -3862,7 +3886,7 @@ async function verifyAttendanceSaveResult(staff, attendanceStatus) {
 
 
     try {
-        const response = await callGoogleSheets({
+        const response = await callGoogleSheets("attendance", {
             action: "status",
             staffId: staff.id
         });
@@ -4133,6 +4157,7 @@ function showWorkflowPanel(name, title, text) {
 
 
 
+    hideAttendanceConfirmActions();
     document.getElementById("workflowName").textContent = name;
     document.getElementById("workflowTitle").textContent = title;
     document.getElementById("workflowText").textContent = text;
@@ -4151,7 +4176,30 @@ function hideWorkflowPanel() {
 
 
 
+    hideAttendanceConfirmActions();
     document.getElementById("workflowPanel").hidden = true;
+
+
+
+
+}
+
+
+
+
+function hideAttendanceConfirmActions() {
+
+
+
+
+    const attendanceConfirmActions = document.getElementById("attendanceConfirmActions");
+
+
+
+
+    if (attendanceConfirmActions) {
+        attendanceConfirmActions.hidden = true;
+    }
 
 
 
@@ -4237,6 +4285,92 @@ function showAttendanceComplete(staff) {
 
 
 
+function showAttendanceCheckInRecorded(attendanceDecision) {
+
+
+
+
+    hideScanningScreen();
+    showWorkflowPanel(
+        "",
+        "Check-in sudah tercatat.",
+        attendanceDecision.message || ("Check-in kamu sudah berhasil tercatat pada pukul " + attendanceDecision.checkInTime + ".")
+    );
+
+
+
+
+}
+
+
+
+
+function showEarlyCheckoutConfirmation(staff) {
+
+
+
+
+    pendingEarlyCheckoutStaff = staff;
+    stopCamera();
+    hideScanningScreen();
+    showWorkflowPanel(
+        "",
+        "Kamu sudah check-in hari ini.",
+        "Apakah kamu yakin ingin melakukan CHECK-OUT sekarang?"
+    );
+    document.getElementById("attendanceConfirmActions").hidden = false;
+
+
+
+
+}
+
+
+
+
+function confirmEarlyCheckout() {
+
+
+
+
+    if (!attendanceIsOpen || !pendingEarlyCheckoutStaff) {
+        return;
+    }
+
+
+
+
+    const staff = pendingEarlyCheckoutStaff;
+    pendingEarlyCheckoutStaff = null;
+    hideAttendanceConfirmActions();
+    runSelfieWorkflow(staff, "check-out", {
+        confirmedEarlyCheckout: true
+    });
+
+
+
+
+}
+
+
+
+
+function cancelEarlyCheckout() {
+
+
+
+
+    pendingEarlyCheckoutStaff = null;
+    goHome();
+
+
+
+
+}
+
+
+
+
 function showAttendanceSaveUncertain(staff) {
 
 
@@ -4301,7 +4435,7 @@ async function getAttendanceDecision(localStaff) {
 
 
 
-    if (!isGoogleSheetsConfigured()) {
+    if (!isGoogleSheetsConfigured("attendance")) {
         return {
             staff: localStaff,
             status: getLocalAttendanceStatus(localStaff.id)
@@ -4317,7 +4451,7 @@ async function getAttendanceDecision(localStaff) {
 
 
     try {
-        response = await callGoogleSheets({
+        response = await callGoogleSheets("attendance", {
             action: "status",
             staffId: localStaff.id
         });
@@ -4343,7 +4477,11 @@ async function getAttendanceDecision(localStaff) {
             id: response.staff.id,
             name: response.staff.name
         },
-        status: response.nextStatus
+        status: response.nextStatus,
+        action: response.action || response.nextStatus,
+        message: response.message || "",
+        checkInTime: response.checkInTime || "",
+        requiresConfirmation: response.requiresConfirmation === true
     };
 
 
@@ -4390,7 +4528,7 @@ function getLocalAttendanceStatus(employeeId) {
 
 
 
-async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
+async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl, saveOptions) {
 
 
 
@@ -4402,7 +4540,7 @@ async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
 
 
 
-    if (isGoogleSheetsConfigured()) {
+    if (isGoogleSheetsConfigured("attendance")) {
         const recordParams = {
             action: "record",
             staffId: staff.id,
@@ -4414,15 +4552,22 @@ async function saveAttendanceRecord(staff, attendanceStatus, selfieDataUrl) {
 
 
 
+        if (saveOptions && saveOptions.confirmedEarlyCheckout) {
+            recordParams.confirmedEarlyCheckout = "Y";
+        }
+
+
+
+
         let response;
 
 
 
 
         try {
-            response = await callGoogleSheets(recordParams);
+            response = await callGoogleSheets("attendance", recordParams);
         } catch (error) {
-            response = await sendGoogleSheetsWriteFallback(recordParams);
+            response = await sendGoogleSheetsWriteFallback("attendance", recordParams);
         }
 
 
@@ -4517,14 +4662,14 @@ function saveLocalAttendanceRecord(staff, attendanceStatus) {
 
 
 
-function sendGoogleSheetsWriteFallback(params) {
+function sendGoogleSheetsWriteFallback(service, params) {
 
 
 
 
     return new Promise(function(resolve) {
         let isDone = false;
-        const requestUrl = buildGoogleSheetsUrl(params);
+        const requestUrl = buildGoogleSheetsUrl(service, params);
         const timeoutId = window.setTimeout(function() {
             finish({ ok: false });
         }, SHEETS_WRITE_FALLBACK_TIMEOUT_MS);
@@ -4609,7 +4754,7 @@ function sendGoogleSheetsImageFallback(requestUrl, finish) {
 
 
 
-function callGoogleSheets(params) {
+function callGoogleSheets(service, params) {
 
 
 
@@ -4648,7 +4793,7 @@ function callGoogleSheets(params) {
 
 
 
-        script.src = buildGoogleSheetsUrl(params, callbackName);
+        script.src = buildGoogleSheetsUrl(service, params, callbackName);
         script.onerror = function() {
             cleanup();
             reject(new Error("Google Sheets request failed."));
@@ -4664,7 +4809,7 @@ function callGoogleSheets(params) {
 
 
 
-function buildGoogleSheetsUrl(params, callbackName) {
+function buildGoogleSheetsUrl(service, params, callbackName) {
 
 
 
@@ -4686,7 +4831,7 @@ function buildGoogleSheetsUrl(params, callbackName) {
 
 
 
-    return GOOGLE_APPS_SCRIPT_URL + "?" + searchParams.toString();
+    return APPS_SCRIPT_URLS[service] + "?" + searchParams.toString();
 
 
 
@@ -4696,12 +4841,12 @@ function buildGoogleSheetsUrl(params, callbackName) {
 
 
 
-function isGoogleSheetsConfigured() {
+function isGoogleSheetsConfigured(service) {
 
 
 
 
-    return GOOGLE_APPS_SCRIPT_URL.indexOf("https://script.google.com/") === 0;
+    return APPS_SCRIPT_URLS[service] && APPS_SCRIPT_URLS[service].indexOf("https://script.google.com/") === 0;
 
 
 
