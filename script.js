@@ -3706,6 +3706,28 @@ async function runSelfieWorkflow(staff, attendanceStatus) {
 
 
         if (!saveResult.saved) {
+            const verifiedSave = await verifyAttendanceSaveResult(staff, attendanceStatus);
+
+
+
+
+            if (verifiedSave.saved) {
+                showAttendanceSuccess(verifiedSave.staff, attendanceStatus);
+                scheduleReturnHome();
+                return;
+            }
+
+
+
+
+            if (verifiedSave.uncertain) {
+                showAttendanceSaveUncertain(staff);
+                return;
+            }
+
+
+
+
             handleSelfieFailure("Absensi belum bisa disimpan. Coba scan ulang.");
             return;
         }
@@ -3814,6 +3836,100 @@ function captureSelfie() {
 
 
     return selfieDataUrl;
+
+
+
+
+}
+
+
+
+
+async function verifyAttendanceSaveResult(staff, attendanceStatus) {
+
+
+
+
+    if (!isGoogleSheetsConfigured()) {
+        return {
+            saved: false,
+            uncertain: false,
+            staff: staff
+        };
+    }
+
+
+
+
+    try {
+        const response = await callGoogleSheets({
+            action: "status",
+            staffId: staff.id
+        });
+
+
+
+
+        if (!response.ok) {
+            return {
+                saved: false,
+                uncertain: true,
+                staff: staff
+            };
+        }
+
+
+
+
+        const verifiedStaff = {
+            id: response.staff.id,
+            name: response.staff.name
+        };
+
+
+
+
+        return {
+            saved: hasAttendanceStatusAdvanced(attendanceStatus, response.nextStatus),
+            uncertain: false,
+            staff: verifiedStaff
+        };
+    } catch (error) {
+        return {
+            saved: false,
+            uncertain: true,
+            staff: staff
+        };
+    }
+
+
+
+
+}
+
+
+
+
+function hasAttendanceStatusAdvanced(attendanceStatus, nextStatus) {
+
+
+
+
+    if (attendanceStatus === "check-in") {
+        return nextStatus === "check-out" || nextStatus === "complete";
+    }
+
+
+
+
+    if (attendanceStatus === "check-out") {
+        return nextStatus === "complete";
+    }
+
+
+
+
+    return false;
 
 
 
@@ -4111,6 +4227,27 @@ function showAttendanceComplete(staff) {
         "",
         "✅ Absensi hari ini sudah lengkap.",
         "Kamu sudah melakukan check-in dan check-out hari ini.\n\nSampai jumpa besok, " + staff.name + "!"
+    );
+
+
+
+
+}
+
+
+
+
+function showAttendanceSaveUncertain(staff) {
+
+
+
+
+    stopCamera();
+    hideScanningScreen();
+    showWorkflowPanel(
+        "",
+        "Absensi belum bisa dipastikan.",
+        "Jangan scan ulang dulu.\n\nHubungi Admin untuk cek absensi kamu, " + staff.name + "."
     );
 
 
