@@ -22,7 +22,7 @@ function queueStockMovement(transaction, pendingSyncReason) {
 
     const queue = getStockPendingQueue();
     const isDuplicate = queue.some(function(item) {
-        return item.transactionId === transaction.transactionId;
+        return item.clientRequestId === transaction.clientRequestId;
     });
 
 
@@ -41,7 +41,7 @@ function queueStockMovement(transaction, pendingSyncReason) {
         pendingSync: true,
         pendingSyncReason: pendingSyncReason || "offline",
         stockAfter: transaction.stockAfter,
-        transactionId: transaction.transactionId
+        clientRequestId: transaction.clientRequestId
     };
 
 
