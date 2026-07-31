@@ -1080,13 +1080,26 @@ async function saveStockMovement(item, actionType, quantity, staff) {
 
 
 
-        const serverStockAfter = Number(response && response.stockAfter);
+        if (!response || response.ok !== true) {
+            return {
+                saved: false,
+                message: response && response.message ? response.message : "Stock belum bisa diperbarui. Coba lagi."
+            };
+        }
 
 
 
 
-        if (!response || !response.ok || response.stockAfter === "" || response.stockAfter === null || response.stockAfter === undefined || !Number.isFinite(serverStockAfter)) {
-            return queueStockMovement(transaction, "backend-unavailable");
+        const serverStockAfter = Number(response.stockAfter);
+
+
+
+
+        if (response.stockAfter === "" || response.stockAfter === null || response.stockAfter === undefined || !Number.isFinite(serverStockAfter)) {
+            return {
+                saved: false,
+                message: "Stock belum bisa diperbarui. Coba lagi."
+            };
         }
 
 
@@ -1096,7 +1109,7 @@ async function saveStockMovement(item, actionType, quantity, staff) {
             saved: true,
             pendingSync: false,
             stockAfter: serverStockAfter,
-            transactionId: transaction.transactionId
+            transactionId: response.transactionId
         };
     } catch (error) {
         console.error("[Stock Write] request failed:", error);
@@ -1182,6 +1195,36 @@ function showStockOfflineSuccess(pendingSyncReason) {
 
 
 
+function generateStockClientRequestId() {
+
+
+
+
+    if (
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+    ) {
+        return crypto.randomUUID();
+    }
+
+
+
+
+    return (
+        "REQ-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2)
+    );
+
+
+
+
+}
+
+
+
+
 function createStockMovementTransaction(item, actionType, quantity, staff, stockBefore, stockAfter) {
 
 
@@ -1193,7 +1236,7 @@ function createStockMovementTransaction(item, actionType, quantity, staff, stock
 
 
     return {
-        transactionId: generateStockTransactionId(),
+        clientRequestId: generateStockClientRequestId(),
         date: formatDateValue(now),
         time: formatTimeValue(now),
         staffId: staff.id,
@@ -1348,7 +1391,7 @@ async function syncPendingStockMovements() {
 
 
 
-                if (!response.ok) {
+                if (!response || response.ok !== true) {
                     break;
                 }
 
