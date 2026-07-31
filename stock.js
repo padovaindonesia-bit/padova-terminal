@@ -1067,6 +1067,7 @@ async function saveStockMovement(item, actionType, quantity, staff) {
 
 
     try {
+        console.log("[Stock Write] sending transaction:", transaction);
         const response = await callGoogleSheets("inventory", Object.assign({
             action: "stockRecord"
         }, transaction));
@@ -1074,11 +1075,18 @@ async function saveStockMovement(item, actionType, quantity, staff) {
 
 
 
-        if (!response.ok) {
-            return {
-                saved: false,
-                message: response.message || "Stock belum bisa diperbarui. Coba lagi."
-            };
+        console.log("[Stock Write] server response:", response);
+
+
+
+
+        const serverStockAfter = Number(response && response.stockAfter);
+
+
+
+
+        if (!response || !response.ok || response.stockAfter === "" || response.stockAfter === null || response.stockAfter === undefined || !Number.isFinite(serverStockAfter)) {
+            return queueStockMovement(transaction, "backend-unavailable");
         }
 
 
@@ -1087,10 +1095,11 @@ async function saveStockMovement(item, actionType, quantity, staff) {
         return {
             saved: true,
             pendingSync: false,
-            stockAfter: transaction.stockAfter,
+            stockAfter: serverStockAfter,
             transactionId: transaction.transactionId
         };
     } catch (error) {
+        console.error("[Stock Write] request failed:", error);
         return queueStockMovement(transaction, navigator.onLine ? "backend-unavailable" : "offline");
     }
 
@@ -1326,9 +1335,15 @@ async function syncPendingStockMovements() {
 
 
             try {
+                console.log("[Stock Sync] sending queued transaction:", transaction);
                 const response = await callGoogleSheets("inventory", Object.assign({
                     action: "stockRecord"
                 }, transaction));
+
+
+
+
+                console.log("[Stock Sync] server response:", response);
 
 
 
