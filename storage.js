@@ -20,16 +20,18 @@ function queueStockMovement(transaction, pendingSyncReason) {
 
 
 
+    const queuedTransaction = normalizeQueuedStockMovement(transaction);
     const queue = getStockPendingQueue();
+    const transactionKey = getStockTransactionKey(queuedTransaction);
     const isDuplicate = queue.some(function(item) {
-        return item.clientRequestId === transaction.clientRequestId;
+        return transactionKey && getStockTransactionKey(item) === transactionKey;
     });
 
 
 
 
     if (!isDuplicate) {
-        queue.push(transaction);
+        queue.push(queuedTransaction);
         saveStockPendingQueue(queue);
     }
 
@@ -40,9 +42,162 @@ function queueStockMovement(transaction, pendingSyncReason) {
         saved: true,
         pendingSync: true,
         pendingSyncReason: pendingSyncReason || "offline",
-        stockAfter: transaction.stockAfter,
-        clientRequestId: transaction.clientRequestId
+        stockAfter: queuedTransaction.stockAfter,
+        transactionId: queuedTransaction.transactionId,
+        clientRequestId: queuedTransaction.clientRequestId,
+        targetMonth: queuedTransaction.targetMonth
     };
+
+
+
+
+}
+
+
+
+
+function getStockTransactionKey(transaction) {
+
+
+
+
+    if (!transaction) {
+        return "";
+    }
+
+
+
+
+    return String(transaction.transactionId || transaction.clientRequestId || "").trim();
+
+
+
+
+}
+
+
+
+
+function normalizeQueuedStockMovement(transaction) {
+
+
+
+
+    if (!transaction) {
+        return transaction;
+    }
+
+
+
+
+    const clientRequestId = String(transaction.clientRequestId || "").trim();
+    const transactionId = String(transaction.transactionId || "").trim();
+    const targetMonth = getStockTargetMonth(transaction);
+    const updates = {};
+
+
+
+
+    if (!transactionId && clientRequestId) {
+        updates.transactionId = clientRequestId;
+    }
+
+
+
+
+    if (targetMonth && transaction.targetMonth !== targetMonth) {
+        updates.targetMonth = targetMonth;
+    }
+
+
+
+
+    if (Object.keys(updates).length === 0) {
+        return transaction;
+    }
+
+
+
+
+    return Object.assign({}, transaction, updates);
+
+
+
+
+}
+
+
+
+
+function getStockTargetMonth(transaction) {
+
+
+
+
+    return normalizeStockMonthValue(
+        transaction.targetMonth ||
+        transaction.activeMonth ||
+        getStockMonthFromDateValue(transaction.date)
+    );
+
+
+
+
+}
+
+
+
+
+function getStockMonthFromDateValue(value) {
+
+
+
+
+    const match = String(value || "").trim().match(/^\d{4}-(\d{1,2})-\d{1,2}$/);
+
+
+
+
+    return match ? match[1] : "";
+
+
+
+
+}
+
+
+
+
+function normalizeStockMonthValue(value) {
+
+
+
+
+    const text = String(value || "").trim();
+
+
+
+
+    if (!text) {
+        return "";
+    }
+
+
+
+
+    const month = Number(text);
+
+
+
+
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+        return "";
+    }
+
+
+
+
+    return String(month).padStart(2, "0");
 
 
 
