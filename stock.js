@@ -449,6 +449,8 @@ async function getStockItemFromSheets(itemCode) {
             itemType: response.item.itemType || "",
             status: response.item.status || "Active",
             productionUnit: response.item.productionUnit || "pcs",
+            targetMonth: response.item.targetMonth || response.item.activeMonth || response.targetMonth || response.activeMonth || "",
+            activeMonth: response.item.activeMonth || response.activeMonth || "",
             stock: Number(response.item.currentStock),
             stockAvailable: response.item.stockAvailable === true
         };
@@ -1235,8 +1237,16 @@ function createStockMovementTransaction(item, actionType, quantity, staff, stock
 
 
 
+    const targetMonth = item.targetMonth || item.activeMonth || getStockTargetMonthFromDate(now);
+
+
+
+
     return {
+        transactionId: generateStockTransactionId(),
         clientRequestId: generateStockClientRequestId(),
+        targetMonth: targetMonth,
+        activeMonth: targetMonth,
         date: formatDateValue(now),
         time: formatTimeValue(now),
         staffId: staff.id,
@@ -1287,6 +1297,21 @@ function formatDateValue(date) {
 
 
     return year + "-" + month + "-" + day;
+
+
+
+
+}
+
+
+
+
+function getStockTargetMonthFromDate(date) {
+
+
+
+
+    return String(date.getMonth() + 1).padStart(2, "0");
 
 
 
@@ -1372,7 +1397,15 @@ async function syncPendingStockMovements() {
 
     try {
         while (remainingQueue.length > 0) {
-            const transaction = remainingQueue[0];
+            const transaction = normalizeQueuedStockMovement(remainingQueue[0]);
+
+
+
+
+            if (transaction !== remainingQueue[0]) {
+                remainingQueue[0] = transaction;
+                saveStockPendingQueue(remainingQueue);
+            }
 
 
 
