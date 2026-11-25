@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {initialState,balance,receiveGoods,createPurchase,unmatchedQty,postMovement} from './engine.mjs';
+const st=initialState();
+assert.equal(balance(st,'HCSSP01'),8);
+const r=receiveGoods(st,{itemCode:'HCSSP01',qty:20,requestId:'req-1',supplierDoc:'INV-01'});
+assert.equal(balance(st,'HCSSP01'),28);
+assert.equal(receiveGoods(st,{itemCode:'HCSSP01',qty:20,requestId:'req-1'}).duplicate,true);
+assert.equal(balance(st,'HCSSP01'),28);
+const p=createPurchase(st,{supplier:'Supplier A',invoice:'INV-01',itemCode:'HCSSP01',invoiceQty:20,unitCost:22000,receiptAllocations:[{receiptId:r.receipt.id,qty:20}]});
+assert.equal(p.status,'MATCHED');assert.equal(balance(st,'HCSSP01'),28);assert.equal(unmatchedQty(st,r.receipt.id),0);
+postMovement(st,{itemCode:'HCSSP01',qty:5,type:'MATERIAL_ISSUE',requestId:'req-2'});
+assert.equal(balance(st,'HCSSP01'),23);
+const p2=createPurchase(st,{supplier:'Supplier B',invoice:'INV-02',itemCode:'PEKM03',invoiceQty:2,unitCost:10});
+assert.equal(p2.status,'PENDING MATCHING');assert.equal(balance(st,'PEKM03'),1);
+assert.throws(()=>postMovement(st,{itemCode:'PEKM03',qty:2,type:'MATERIAL_ISSUE',requestId:'req-3'}),/Insufficient/);
+assert.throws(()=>createPurchase(st,{supplier:'Supplier C',invoice:'INV-03',itemCode:'HCSSP01',invoiceQty:20,unitCost:10,receiptAllocations:[{receiptId:r.receipt.id,qty:20}]}),/Invalid receipt/);
+console.log('PASS: receipt, idempotency, purchasing no stock impact, issue, pending match, and guardrails');
