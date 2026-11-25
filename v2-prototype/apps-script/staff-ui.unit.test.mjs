@@ -10,27 +10,30 @@ assert.ok(script,'Staff page must contain its client controller');
 new vm.Script(script,{filename:'PADOVA_V2_Staff_Staging.html'});
 
 class El {
-  constructor(id){this.id=id;this.value='';this.textContent='';this.className='';this.style={};this.dataset={};this.disabled=false;this.listeners={};}
+  constructor(id){this.id=id;this.value='';this.textContent='';this.className='';this.style={};this.dataset={};this.disabled=false;this.hidden=false;this.listeners={};}
   addEventListener(type,fn){this.listeners[type]=fn;}
   focus(){}
   select(){}
   click(){this.onclick?.();}
 }
-const ids=['deviceToken','applyToken','deviceState','staffId','itemCode','lookup','itemCard','itemName','itemCodeLabel','itemStock','itemUnit','qty','supplierDoc','stockIn','stockOut','status','pending','pendingDetail','retry','discard','clearQty'];
+const ids=['deviceToken','applyToken','deviceState','staffId','itemCode','lookup','itemCard','itemName','itemCodeLabel','itemStock','itemUnit','todayNote','qty','supplierDoc','supplierDocGroup','actionHint','stockIn','stockOut','status','pending','pendingDetail','retry','discard','clearQty'];
 const elements=Object.fromEntries(ids.map(id=>[id,new El(id)]));
 const steppers=[-1,1,5].map(step=>{const e=new El('step'+step);e.dataset.step=String(step);return e});
-const pendingStore=new Map();const calls=[];const seen=new Set();let stock=23,failFirstWrite=true;
+const pendingStore=new Map();const calls=[];const seen=new Set();let stock=23,finishedStock=4,failFirstWrite=true;
 const scriptRun={
   withSuccessHandler(success){return {...this,success}},
   withFailureHandler(failure){return {...this,failure}},
   v2StaffApi(payload){
     calls.push(payload);
     queueMicrotask(()=>{
-      if(payload.action==='itemLookup')return this.success(payload.deviceToken==='test-token'?{ok:true,itemCode:'TEST-DACRON',itemName:'Dacron — DEMO',unit:'ball',stockAfter:stock}:{ok:false,message:'Device not authorized'});
+      if(payload.action==='itemLookup'){
+        const finished=payload.itemCode==='TEST-PILLOW';
+        return this.success(payload.deviceToken==='test-token'?{ok:true,itemCode:payload.itemCode,itemName:finished?'Bantal Classic — DEMO':'Dacron — DEMO',itemType:finished?'FINISHED_GOODS':'RAW_MATERIAL',unit:finished?'pcs':'ball',stockAfter:finished?finishedStock:stock,todayQty:finished?0:2}:{ok:false,message:'Device not authorized'});
+      }
       const duplicate=seen.has(payload.requestId);
-      if(!duplicate){stock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);seen.add(payload.requestId)}
+      if(!duplicate){if(payload.itemCode==='TEST-PILLOW')finishedStock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);else stock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);seen.add(payload.requestId)}
       if(failFirstWrite){failFirstWrite=false;return this.failure(Error('Network reply lost'))}
-      this.success({ok:true,duplicate,stockAfter:stock});
+      this.success({ok:true,duplicate,stockAfter:payload.itemCode==='TEST-PILLOW'?finishedStock:stock});
     });
   }
 };
@@ -59,4 +62,15 @@ assert.equal(elements.supplierDoc.value,'');
 assert.equal(elements.staffId.value,'');
 assert.equal(elements.pending.style.display,'none');
 assert.equal(storage.getItem('padova-v2-staff-staging-pending-v1'),null);
-console.log('PASS: staff UI uses device auth, retries same request ID, hides prices, and clears forms');
+elements.itemCode.value='TEST-PILLOW';elements.lookup.click();await settle();
+assert.equal(elements.supplierDocGroup.hidden,true,'Supplier reference must disappear for finished goods');
+assert.equal(elements.stockOut.textContent,'KOREKSI −');
+assert.match(elements.todayNote.textContent,/Selesai & dikemas hari ini/);
+elements.staffId.value='STAFF 1';elements.qty.value='3';elements.stockIn.click();await settle();
+assert.equal(finishedStock,7,'Completed production must increase finished stock once');
+assert.equal(calls.at(-1).supplierDoc,'','Production must not require purchasing fields');
+assert.equal(elements.qty.value,'','Production must reset the staff quantity input');
+elements.itemCode.value='TEST-PILLOW';elements.lookup.click();await settle();
+elements.staffId.value='STAFF 1';elements.qty.value='1';elements.stockOut.click();await settle();
+assert.equal(finishedStock,6,'Same-day correction must reduce finished stock');
+console.log('PASS: staff auth, retries, no prices, raw receipts, finished production/corrections, and form reset');
