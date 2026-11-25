@@ -16,7 +16,7 @@ class Sheet {
  };}
 }
 const sheets={
- 'Item Master':new Sheet([['Item Code','Name','Type','Unit','Opening','Active'],['HCSSP01','Dacron','Raw Material','ball',8,'YES']]),
+ 'Item Master':new Sheet([['Item Code','Name','Type','Unit','Opening','Active'],['HCSSP01','Dacron','Raw Material','ball',8,'YES'],['TEST-PILLOW','Bantal Classic — DEMO','Finished Goods','pcs',4,'YES']]),
  'Goods Receipts':new Sheet([['Receipt ID']]),
  'Receipt Reversals':new Sheet([['Reversal ID']]),
  'Stock Movements':new Sheet([['Movement ID']]),
@@ -127,4 +127,30 @@ context.Session.getActiveUser=()=>({getEmail:()=> 'intruder@example.com'});
 assert.equal(context.v2OwnerApi({action:'snapshot'}).ok,false);
 assert.throws(()=>context.doGet({parameter:{ui:'owner'}}),/Only the Padova owner/);
 context.Session.getActiveUser=ownerEmail;
-console.log('PASS: staff receipts/reversals; owner-only purchasing, automatic/manual matching, editing, idempotency, and unchanged stock');
+// End-of-day production uses the same stock screen, but an independent event
+// type. No supplier receipt/purchasing/BOM row is written for completed goods.
+const finishedLookup=context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',deviceToken:token});
+assert.equal(finishedLookup.itemType,'FINISHED_GOODS');
+assert.equal(finishedLookup.stockAfter,4);
+assert.equal(finishedLookup.todayQty,0);
+assert.equal('unitCost' in finishedLookup,false,'Staff must not receive prices');
+const receiptsBefore=sheets['Goods Receipts'].rows.length;
+const finished=context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:6,staffId:'STAFF',requestId:'daily-finished-1',deviceToken:token});
+assert.equal(finished.ok,true);
+assert.equal(finished.stockAfter,10);
+assert.equal(sheets['Stock Movements'].rows.at(-1)[4],'PRODUCTION_FINISHED');
+assert.equal(sheets['Goods Receipts'].rows.length,receiptsBefore);
+assert.equal(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:6,staffId:'STAFF',requestId:'daily-finished-1',deviceToken:token}).duplicate,true);
+assert.equal(context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',deviceToken:token}).todayQty,6);
+assert.match(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:1.5,staffId:'STAFF',requestId:'fraction',deviceToken:token}).message,/whole units/);
+assert.match(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',supplierDoc:'SUP-123',requestId:'bad-finished-doc',deviceToken:token}).message,/does not use a supplier/);
+assert.match(context.v2StaffApi({action:'stockIn',itemCode:'HCSSP01',qty:1,staffId:'STAFF',requestId:'no-raw-doc',deviceToken:token}).message,/Supplier invoice or sales order/);
+const correctedFinish=context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',requestId:'daily-finished-fix',deviceToken:token});
+assert.equal(correctedFinish.ok,true);
+assert.equal(correctedFinish.stockAfter,8);
+assert.equal(sheets['Stock Movements'].rows.at(-1)[4],'PRODUCTION_CORRECTION_OUT');
+assert.equal(context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',deviceToken:token}).todayQty,4);
+assert.equal(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',requestId:'daily-finished-fix',deviceToken:token}).duplicate,true);
+assert.match(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:5,staffId:'STAFF',requestId:'over-fix',deviceToken:token}).message,/exceeds finished goods recorded today/);
+assert.equal(sheets['Goods Receipts'].rows.length,receiptsBefore);
+console.log('PASS: staff receipts/reversals, owner matching, production receipts/corrections, idempotency, and no double stock');
