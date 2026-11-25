@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {initialState,balance,receiveGoods,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt,suggestedReceipts,selectedReceiptQuantity} from './engine.mjs';
+import {initialState,balance,receiveGoods,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt,suggestedReceipts,selectedReceiptQuantity,commonSupplierReference} from './engine.mjs';
 const st=initialState();
 assert.equal(balance(st,'HCSSP01'),8);
 const r=receiveGoods(st,{itemCode:'HCSSP01',qty:20,requestId:'req-1',supplierDoc:'INV-01'});
@@ -40,4 +40,11 @@ const a=receiveGoods(st4,{itemCode:'HCSSP01',qty:12,requestId:'multi-1'});
 const b=receiveGoods(st4,{itemCode:'HCSSP01',qty:8,requestId:'multi-2'});
 assert.equal(selectedReceiptQuantity(st4,[a.receipt.id,b.receipt.id]),20);
 assert.equal(selectedReceiptQuantity(st4,[a.receipt.id,a.receipt.id]),12);
+const st5=initialState();
+const refA=receiveGoods(st5,{itemCode:'HCSSP01',qty:12,supplierDoc:' INV-77 ',requestId:'ref-a'});
+const refB=receiveGoods(st5,{itemCode:'HCSSP01',qty:8,supplierDoc:'inv-77',requestId:'ref-b'});
+const refC=receiveGoods(st5,{itemCode:'HCSSP01',qty:5,supplierDoc:'INV-88',requestId:'ref-c'});
+assert.equal(commonSupplierReference(st5,[refA.receipt.id,refB.receipt.id]),'INV-77');
+assert.equal(commonSupplierReference(st5,[refA.receipt.id,refC.receipt.id]),null);
+assert.equal(suggestedReceipts(st5,{invoice:'INV-77',itemCode:'HCSSP01'}).length,2);
 console.log('PASS: receipt, duplicate prevention, purchasing no stock impact, edit partial match, physical correction, and guardrails');
