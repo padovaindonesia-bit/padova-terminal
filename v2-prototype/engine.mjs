@@ -37,6 +37,13 @@ export function suggestedReceipts(state,{invoice,itemCode}){
   if(!reference)return [];
   return state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===reference&&unmatchedQty(state,r.id)>0);
 }
+export function selectedReceiptQuantity(state,receiptIds,editingPurchaseId=null){
+  const existing=state.purchases.find(p=>p.id===editingPurchaseId);
+  return [...new Set(receiptIds)].reduce((total,id)=>{
+    const previouslyAllocated=existing?.receiptAllocations?.find(a=>a.receiptId===id)?.qty??0;
+    return total+unmatchedQty(state,id)+previouslyAllocated;
+  },0);
+}
 export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[]}){
   if(!invoice||!supplier||!state.items.some(x=>x.code===itemCode)||!validQty(invoiceQty)||!Number.isFinite(Number(unitCost))||Number(unitCost)<0)throw Error('Complete supplier, invoice, item, quantity and cost');
   const existing=id?state.purchases.find(p=>p.id===id):null;
