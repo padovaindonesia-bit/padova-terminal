@@ -118,12 +118,16 @@ let state;try{const x=JSON.parse(localStorage.getItem(KEY));state=x?.items&&x?.r
 let editingId=null;
 let manualMatchOverride=false;
 const itemName=code=>state.items.find(x=>x.code===code)?.name??code;
-const options=()=>state.items.map(i=>`<option value="${esc(i.code)}">${esc(i.name)} (${esc(i.code)})</option>`).join('');
+const options=()=>'<option value="">Select item...</option>'+state.items.map(i=>`<option value="${esc(i.code)}">${esc(i.name)} (${esc(i.code)})</option>`).join('');
 function persist(){localStorage.setItem(KEY,JSON.stringify(state));draw();}
 function message(id,s,bad=false){const e=$(id);e.textContent=s;e.style.display='block';e.className='status'+(bad?' bad':'');}
 function showStaff(show){$('staff').style.display=show?'block':'none';$('owner').style.display=show?'none':'block';$('staffTab').className=show?'active':'';$('ownerTab').className=show?'':'active';draw();}
 function editPurchase(id){const p=state.purchases.find(x=>x.id===id);if(!p)return;editingId=id;manualMatchOverride=false;$('supplier').value=p.supplier;$('invoice').value=p.invoice;$('purchaseItem').value=p.itemCode;$('invoiceQty').value=p.invoiceQty;$('unitCost').value=p.unitCost;draw();$('purchaseHeading').textContent='Edit Purchase';$('editNotice').style.display='block';$('purchaseButton').textContent='SAVE CHANGES';$('purchaseHeading').scrollIntoView({behavior:'smooth'});}
-function newPurchase(){editingId=null;manualMatchOverride=false;$('purchaseHeading').textContent='New Purchase';$('editNotice').style.display='none';$('purchaseButton').textContent='SAVE PURCHASE';$('supplier').value='DEMO SUPPLIER';$('invoice').value='';$('invoiceQty').value='';$('unitCost').value='';$('showAllReceipts').checked=false;draw();}
+function newPurchase(){editingId=null;manualMatchOverride=false;$('purchaseHeading').textContent='New Purchase';$('editNotice').style.display='none';$('purchaseButton').textContent='SAVE PURCHASE';$('supplier').value='';$('invoice').value='';$('purchaseItem').value='';$('invoiceQty').value='';$('unitCost').value='';$('showAllReceipts').checked=false;draw();}
+function clearStaffEntry(){
+ $('stockItem').value='';$('stockQty').value='';$('stockUnit').textContent='';$('staffName').value='';$('supplierDoc').value='';
+ draw();
+}
 function checkedReceiptIds(){return [...document.querySelectorAll('.receiptPick:checked')].map(x=>x.dataset.id);}
 function refreshQuantityRelation(){
  const ids=checkedReceiptIds();
@@ -169,11 +173,11 @@ $('staffTab').onclick=()=>showStaff(true);$('ownerTab').onclick=()=>showStaff(fa
 $('invoice').oninput=()=>{manualMatchOverride=false;draw()};$('showAllReceipts').onchange=draw;$('invoiceQty').oninput=refreshQuantityRelation;
 document.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{$('stockQty').value=Math.max(0,(Number($('stockQty').value)||0)+Number(b.dataset.qty));});
 $('clearQty').onclick=()=>{$('stockQty').value='';$('stockQty').focus()};$('stockQty').onclick=e=>e.target.select();
-$('inButton').onclick=()=>{try{const r=receiveGoods(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:$('supplierDoc').value.trim(),requestId:crypto.randomUUID()});persist();message('stockStatus',`Received ${r.receipt.qty}. Reference: ${r.receipt.supplierDoc||'not provided'}. Stock is now ${balance(state,r.receipt.itemCode)}.`)}catch(e){message('stockStatus',e.message,true)}};
-$('outButton').onclick=()=>{try{postMovement(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,type:'MATERIAL_ISSUE',requestId:crypto.randomUUID()});persist();message('stockStatus',`Materials taken. Stock is now ${balance(state,$('stockItem').value)}.`)}catch(e){message('stockStatus',e.message,true)}};
-$('purchaseButton').onclick=()=>{try{const p=savePurchase(state,{id:editingId,invoice:$('invoice').value.trim(),supplier:$('supplier').value.trim(),itemCode:$('purchaseItem').value,invoiceQty:$('invoiceQty').value,unitCost:$('unitCost').value,receiptAllocations:selectedAllocations(),autoMatch:!manualMatchOverride});persist();editPurchase(p.id);message('purchaseStatus',`Saved: ${p.status}. Stock unchanged.`)}catch(e){message('purchaseStatus',e.message,true)}};
+$('inButton').onclick=()=>{try{const r=receiveGoods(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:$('supplierDoc').value.trim(),requestId:crypto.randomUUID()});const finalStock=balance(state,r.receipt.itemCode);persist();clearStaffEntry();message('stockStatus',`Received ${r.receipt.qty}. Reference: ${r.receipt.supplierDoc||'not provided'}. Stock is now ${finalStock}. Ready for next entry.`)}catch(e){message('stockStatus',e.message,true)}};
+$('outButton').onclick=()=>{try{const item=$('stockItem').value;postMovement(state,{itemCode:item,qty:$('stockQty').value,staff:$('staffName').value,type:'MATERIAL_ISSUE',requestId:crypto.randomUUID()});const finalStock=balance(state,item);persist();clearStaffEntry();message('stockStatus',`Materials taken. Stock is now ${finalStock}. Ready for next entry.`)}catch(e){message('stockStatus',e.message,true)}};
+$('purchaseButton').onclick=()=>{try{const p=savePurchase(state,{id:editingId,invoice:$('invoice').value.trim(),supplier:$('supplier').value.trim(),itemCode:$('purchaseItem').value,invoiceQty:$('invoiceQty').value,unitCost:$('unitCost').value,receiptAllocations:selectedAllocations(),autoMatch:!manualMatchOverride});persist();newPurchase();message('purchaseStatus',`Saved invoice ${p.invoice}: ${p.status}. Stock unchanged. Ready for next entry.`)}catch(e){message('purchaseStatus',e.message,true)}};
 $('newPurchase').onclick=newPurchase;
-$('resetButton').onclick=()=>{if(confirm('Clear this browser\'s V2 demo data?')){state=initialState();editingId=null;persist();newPurchase();message('stockStatus','Demo reset.')}};
-$('stockItem').innerHTML=options();$('purchaseItem').innerHTML=options();draw();
+$('resetButton').onclick=()=>{if(confirm('Clear this browser\'s V2 demo data?')){state=initialState();editingId=null;persist();newPurchase();clearStaffEntry();message('stockStatus','Demo reset.')}};
+$('stockItem').innerHTML=options();$('purchaseItem').innerHTML=options();newPurchase();clearStaffEntry();
 
 </script></body></html>
