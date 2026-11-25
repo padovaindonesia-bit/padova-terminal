@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {initialState,balance,receiveGoods,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt,suggestedReceipts,selectedReceiptQuantity,commonSupplierReference} from './engine.mjs';
+import {initialState,balance,receiveGoods,reverseGoodsReceipt,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt,suggestedReceipts,selectedReceiptQuantity,commonSupplierReference} from './engine.mjs';
 const st=initialState();
 assert.equal(balance(st,'HCSSP01'),8);
 const r=receiveGoods(st,{itemCode:'HCSSP01',qty:20,requestId:'req-1',supplierDoc:'INV-01'});
@@ -62,4 +62,24 @@ const st7=initialState();
 receiveGoods(st7,{itemCode:'HCSSP01',qty:20,supplierDoc:'INV-7',requestId:'real-7'});
 const manual=savePurchase(st7,{supplier:'Supplier A',invoice:'INV-7',itemCode:'HCSSP01',invoiceQty:20,unitCost:100,autoMatch:false});
 assert.equal(manual.status,'PENDING MATCHING');
+// User regression: wrong item physically recorded under invoice 1111, then KELUAR
+// with the same item/reference must remove the receipt from owner matching too.
+const st8=initialState();
+const wrong=receiveGoods(st8,{itemCode:'PEKM03',qty:1,supplierDoc:'1111',requestId:'wrong-in'});
+assert.equal(balance(st8,'PEKM03'),2);
+assert.equal(suggestedReceipts(st8,{invoice:'1111',itemCode:'PEKM03'}).length,1);
+const reversal=reverseGoodsReceipt(st8,{itemCode:'PEKM03',qty:1,supplierDoc:'1111',requestId:'wrong-out'});
+assert.equal(reversal.reversedQty,1);
+assert.equal(balance(st8,'PEKM03'),1);
+assert.equal(unmatchedQty(st8,wrong.receipt.id),0);
+assert.equal(wrong.receipt.status,'REVERSED');
+assert.equal(suggestedReceipts(st8,{invoice:'1111',itemCode:'PEKM03'}).length,0);
+assert.equal(reverseGoodsReceipt(st8,{itemCode:'PEKM03',qty:1,supplierDoc:'1111',requestId:'wrong-out'}).duplicate,true);
+assert.equal(balance(st8,'PEKM03'),1);
+assert.throws(()=>reverseGoodsReceipt(st8,{itemCode:'PEKM03',qty:1,supplierDoc:'1111',requestId:'wrong-out-2'}),/no sufficient unmatched/);
+const st9=initialState();
+const partialReceipt=receiveGoods(st9,{itemCode:'HCSSP01',qty:20,supplierDoc:'1111',requestId:'pr-in'});
+savePurchase(st9,{supplier:'S',invoice:'1111',itemCode:'HCSSP01',invoiceQty:15,unitCost:1,receiptAllocations:[{receiptId:partialReceipt.receipt.id,qty:15}]});
+assert.throws(()=>reverseGoodsReceipt(st9,{itemCode:'HCSSP01',qty:10,supplierDoc:'1111',requestId:'pr-out'}),/no sufficient unmatched/);
+assert.equal(balance(st9,'HCSSP01'),28);
 console.log('PASS: receipt, duplicate prevention, purchasing no stock impact, edit partial match, physical correction, and guardrails');
