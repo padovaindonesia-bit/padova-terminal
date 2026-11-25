@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {initialState,balance,receiveGoods,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt} from './engine.mjs';
+import {initialState,balance,receiveGoods,createPurchase,savePurchase,unmatchedQty,postMovement,correctReceipt,suggestedReceipts} from './engine.mjs';
 const st=initialState();
 assert.equal(balance(st,'HCSSP01'),8);
 const r=receiveGoods(st,{itemCode:'HCSSP01',qty:20,requestId:'req-1',supplierDoc:'INV-01'});
@@ -26,4 +26,11 @@ assert.equal(balance(st2,'HCSSP01'),58);
 correctReceipt(st2,{receiptId:r3.receipt.id,correctQty:20,reason:'Counted ten too many'});
 assert.equal(balance(st2,'HCSSP01'),48);assert.equal(st2.corrections.length,1);
 assert.throws(()=>correctReceipt(st2,{receiptId:r2.receipt.id,correctQty:10,reason:'Mistake'}),/already matched/);
+const st3=initialState();
+const matchOne=receiveGoods(st3,{itemCode:'HCSSP01',qty:20,supplierDoc:'  INV-2026-001 ',requestId:'staff-1'});
+receiveGoods(st3,{itemCode:'HCSSP01',qty:5,supplierDoc:'DIFFERENT',requestId:'staff-2'});
+assert.deepEqual(suggestedReceipts(st3,{invoice:'inv-2026-001',itemCode:'HCSSP01'}).map(r=>r.id),[matchOne.receipt.id]);
+assert.equal(suggestedReceipts(st3,{invoice:'',itemCode:'HCSSP01'}).length,0);
+const matched=createPurchase(st3,{supplier:'A',invoice:'INV-2026-001',itemCode:'HCSSP01',invoiceQty:20,unitCost:1,receiptAllocations:[{receiptId:matchOne.receipt.id,qty:20}]});
+assert.equal(matched.status,'MATCHED');assert.equal(suggestedReceipts(st3,{invoice:'INV-2026-001',itemCode:'HCSSP01'}).length,0);
 console.log('PASS: receipt, duplicate prevention, purchasing no stock impact, edit partial match, physical correction, and guardrails');
