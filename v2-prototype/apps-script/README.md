@@ -1,9 +1,9 @@
 # PADOVA V2 — Apps Script inventory staging
 
 **Status:** isolated Apps Script `/dev` preview only. Staff goods receipts,
-owner purchase matching, and purchasing edits were verified against the real
-sandbox. The next addition is daily production posting for test raw materials
-and finished goods, never live stock.
+owner purchase matching/edits, and a finished-goods daily production/correction
+cycle have been verified against the real sandbox with fictional items. No live
+stock is connected.
 
 This folder is for a **new, standalone Apps Script project**, linked only to the
 [PADOVA V2 Inventory Sandbox](https://docs.google.com/spreadsheets/d/1nVvEU51gktNpt8T4XDaokqw33O-yVgbyEWx4D62OBuI).
@@ -23,7 +23,10 @@ Never paste it over the existing live Inventory or Attendance Apps Script.
   the same item and reference. `stockOut` **without reference** records a normal
   material withdrawal. Fully reversed receipts stop being matchable to purchases.
 - Item Master `Item Type` controls stock-in semantics. **Raw Material** MASUK
-  requires supplier invoice/SO and creates a `GOODS_RECEIPT`. **Finished Goods**
+  **with supplier invoice/SO** creates a `GOODS_RECEIPT`. MASUK **without** a
+  supplier reference can only correct material use recorded earlier the same day
+  (`MATERIAL_ISSUE_CORRECTION_IN`), capped by that day's net usage. It never
+  creates a receipt or purchase. **Finished Goods**
   MASUK creates only a `PRODUCTION_FINISHED` movement, no supplier receipt or
   purchasing record. Staff enter packed, ready-to-sell quantities once at the
   end of the day; BOM quantities are never deducted automatically.
@@ -60,13 +63,13 @@ Never paste it over the existing live Inventory or Attendance Apps Script.
 ## What isn't done yet
 
 - This is not attached to the original browser-only demo or live Terminal.
-- Production needs a real browser-to-Sheet integration test against a fictional
-  finished-goods item before this addition is considered verified.
+- Raw-material daily consumption and its correction still need a real
+  browser-to-Sheet staging test; local regression tests pass.
 - Camera QR scanner integration and persistent offline queue remain to be done.
 - Transaction quotas, schema migrations, and recovery procedures need
   end-to-end tests on the staging Google Sheet and tablet.
-- Staff corrections must eventually obey the agreed recent/unlinked correction
-  policy (proposed 15-minute window); **do not deploy this backend for staff** yet.
+- Broader staff correction policy and review/audit controls still need agreement
+  and validation; **do not deploy this backend for real staff** yet.
 
 ## Deploy the production staging update
 
@@ -77,7 +80,8 @@ Never paste it over the existing live Inventory or Attendance Apps Script.
    fictional active items for tests, and corresponding Current Stock formulas.
 4. Test privately at the existing **editor-only** `/dev?ui=staff` preview.
    Do **not** change the existing owner-only `/exec` deployment or its access.
-5. Verify raw `KELUAR` posts `MATERIAL_ISSUE`, finished `MASUK` posts
+5. Verify raw `KELUAR` posts `MATERIAL_ISSUE`, raw `KOREKSI +` posts
+   `MATERIAL_ISSUE_CORRECTION_IN` (only up to today's net use), finished `MASUK` posts
    `PRODUCTION_FINISHED`, a same-day finished correction posts
    `PRODUCTION_CORRECTION_OUT`, and retries do not double-count. No supplier
    receipt or purchase is created by production, and staff never see pricing.
