@@ -33,10 +33,33 @@ function receiveGoods(state,{itemCode,qty,staff='Staff',supplierDoc='',requestId
   const existing=state.receipts.find(x=>x.requestId===requestId);
   if(existing)return {receipt:existing,duplicate:true};
   if(!validQty(qty))throw Error('Quantity must be positive');
-  const receipt={id:`GR-${crypto.randomUUID()}`,requestId,itemCode,qty:Number(qty),staff,supplierDoc,time:new Date().toISOString()};
+  const receipt={id:`GR-${crypto.randomUUID()}`,requestId,itemCode,qty:Number(qty),originalQty:Number(qty),staff,supplierDoc,time:new Date().toISOString(),status:'ACTIVE'};
   const movement=postMovement(state,{itemCode,qty,type:'GOODS_RECEIPT',requestId,ref:receipt.id,staff});
   state.receipts.push(receipt);
   return {receipt,movement:movement.movement,duplicate:false};
+}
+function reverseGoodsReceipt(state,{itemCode,qty,supplierDoc,staff='Staff',requestId}){
+  if(!requestId||!String(supplierDoc??'').trim()||!validQty(qty))throw Error('Item, supplier reference, quantity and request ID required');
+  const prior=state.movements.find(m=>m.requestId===requestId);
+  if(prior)return {movement:prior,duplicate:true};
+  const reference=String(supplierDoc).trim().toUpperCase();
+  const candidates=state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===reference&&unmatchedQty(state,r.id)>0).reverse();
+  let remaining=Number(qty);const adjustments=[];
+  for(const r of candidates){
+    const deduct=Math.min(remaining,unmatchedQty(state,r.id));
+    if(deduct>0)adjustments.push({receipt:r,qty:deduct});
+    remaining-=deduct;
+    if(remaining<=0)break;
+  }
+  if(remaining>0)throw Error('Cannot reverse: no sufficient unmatched goods receipt with this item and invoice number. Ask management to review.');
+  // Post one offsetting movement; the original receipt and transaction remain in history.
+  const result=postMovement(state,{itemCode,qty,type:'CORRECTION_OUT',requestId,staff,ref:adjustments.map(a=>a.receipt.id).join(',')});
+  for(const a of adjustments){
+    const oldQty=a.receipt.qty;a.receipt.qty-=a.qty;
+    if(a.receipt.qty===0)a.receipt.status='REVERSED';
+    (state.corrections??=[]).push({kind:'RECEIPT_REVERSAL',receiptId:a.receipt.id,oldQty,newQty:a.receipt.qty,reason:`KELUAR correction for ${supplierDoc}`,staff,time:new Date().toISOString()});
+  }
+  return {movement:result.movement,duplicate:false,reversedQty:Number(qty)};
 }
 function unmatchedQty(state,receiptId){
   const receipt=state.receipts.find(x=>x.id===receiptId);if(!receipt)throw Error('Receipt not found');
@@ -174,10 +197,11 @@ $('invoice').oninput=()=>{manualMatchOverride=false;draw()};$('showAllReceipts')
 document.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{$('stockQty').value=Math.max(0,(Number($('stockQty').value)||0)+Number(b.dataset.qty));});
 $('clearQty').onclick=()=>{$('stockQty').value='';$('stockQty').focus()};$('stockQty').onclick=e=>e.target.select();
 $('inButton').onclick=()=>{try{const r=receiveGoods(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:$('supplierDoc').value.trim(),requestId:crypto.randomUUID()});const finalStock=balance(state,r.receipt.itemCode);persist();clearStaffEntry();message('stockStatus',`Received ${r.receipt.qty}. Reference: ${r.receipt.supplierDoc||'not provided'}. Stock is now ${finalStock}. Ready for next entry.`)}catch(e){message('stockStatus',e.message,true)}};
-$('outButton').onclick=()=>{try{const item=$('stockItem').value;postMovement(state,{itemCode:item,qty:$('stockQty').value,staff:$('staffName').value,type:'MATERIAL_ISSUE',requestId:crypto.randomUUID()});const finalStock=balance(state,item);persist();clearStaffEntry();message('stockStatus',`Materials taken. Stock is now ${finalStock}. Ready for next entry.`)}catch(e){message('stockStatus',e.message,true)}};
+$('outButton').onclick=()=>{try{const item=$('stockItem').value;const reference=$('supplierDoc').value.trim();if(reference){reverseGoodsReceipt(state,{itemCode:item,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:reference,requestId:crypto.randomUUID()})}else{postMovement(state,{itemCode:item,qty:$('stockQty').value,staff:$('staffName').value,type:'MATERIAL_ISSUE',requestId:crypto.randomUUID()})}const finalStock=balance(state,item);persist();clearStaffEntry();message('stockStatus',`${reference?'Goods receipt corrected':'Materials taken'}. Stock is now ${finalStock}. Ready for next entry.`)}catch(e){message('stockStatus',e.message,true)}};
 $('purchaseButton').onclick=()=>{try{const p=savePurchase(state,{id:editingId,invoice:$('invoice').value.trim(),supplier:$('supplier').value.trim(),itemCode:$('purchaseItem').value,invoiceQty:$('invoiceQty').value,unitCost:$('unitCost').value,receiptAllocations:selectedAllocations(),autoMatch:!manualMatchOverride});persist();newPurchase();message('purchaseStatus',`Saved invoice ${p.invoice}: ${p.status}. Stock unchanged. Ready for next entry.`)}catch(e){message('purchaseStatus',e.message,true)}};
 $('newPurchase').onclick=newPurchase;
 $('resetButton').onclick=()=>{if(confirm('Clear this browser\'s V2 demo data?')){state=initialState();editingId=null;persist();newPurchase();clearStaffEntry();message('stockStatus','Demo reset.')}};
+$('supplierDoc').insertAdjacentHTML('afterend','<p class="muted">MASUK with invoice/SO = goods receipt. KELUAR with the same reference = reverse an unmatched receipt. Leave the reference blank for ordinary material withdrawal.</p>');
 $('stockItem').innerHTML=options();$('purchaseItem').innerHTML=options();newPurchase();clearStaffEntry();
 
 </script></body></html>
