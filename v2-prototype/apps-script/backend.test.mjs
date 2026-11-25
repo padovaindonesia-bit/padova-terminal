@@ -20,7 +20,16 @@ const sheets={
  'Goods Receipts':new Sheet([['Receipt ID']]),
  'Receipt Reversals':new Sheet([['Reversal ID']]),
  'Stock Movements':new Sheet([['Movement ID']]),
- 'Purchase Receipt Links':new Sheet([['Link ID']])
+ 'Purchase Receipt Links':new Sheet([['Link ID']]),
+ 'Sales Orders':new Sheet([['SO ID','SO No','Status','Customer','Order Date','Notes'],
+  ['SO-TEST-001','SO-V2-001','CONFIRMED','Fictional Customer A','2026-11-25','TEST'],
+  ['SO-TEST-002','SO-V2-002','CONFIRMED','Fictional Customer B','2026-11-25','TEST'],
+  ['SO-TEST-003','SO-V2-003','PENDING','Fictional Customer C','2026-11-25','TEST']]),
+ 'SO Lines':new Sheet([['SO Line ID','SO ID','Item Code','Ordered Qty','Unit','Notes'],
+  ['SOL-TEST-001','SO-TEST-001','TEST-PILLOW',7,'pcs',''],
+  ['SOL-TEST-002','SO-TEST-002','TEST-PILLOW',4,'pcs',''],
+  ['SOL-TEST-003','SO-TEST-003','TEST-PILLOW',1,'pcs','']]),
+ 'Dispatches':new Sheet([['Dispatch ID']])
 };
 const workbook={getId:()=>STAGING_ID,getSheetByName:n=>sheets[n],insertSheet:n=>(sheets[n]=new Sheet([]))};
 const context={
@@ -29,7 +38,7 @@ const context={
   Utilities:{getUuid:()=>crypto.randomUUID(),computeDigest:(_,v)=>[...crypto.createHash('sha256').update(v).digest()].map(b=>b>127?b-256:b),DigestAlgorithm:{SHA_256:'sha256'},formatDate:()=> '2026-11-25'},
   PropertiesService:{getScriptProperties:()=>({getProperty:key=>props.get(key),setProperty:(key,value)=>props.set(key,value)})},
   Session:{getActiveUser:()=>({getEmail:()=> 'padovaindonesia@gmail.com'})},
-  HtmlService:{createHtmlOutputFromFile:name=>({name,setTitle(){return this}})},
+  HtmlService:{createHtmlOutputFromFile:name=>({name,setTitle(){return this}}),createTemplateFromFile:name=>({name,ownerMode:false,evaluate(){return {name,ownerMode:this.ownerMode,setTitle(){return this}}}})},
   ContentService:{createTextOutput:s=>({setMimeType(){return {text:s}}}),MimeType:{JSON:'JSON'}},
   console,Logger:{log(){}},Date,JSON,Number,String,Object,Array,Error,Math
 };
@@ -37,6 +46,10 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(new URL('./PADOVA_V2_Inventory_Staging.gs',import.meta.url),'utf8'),context);
 assert.equal(context.doGet({parameter:{ui:'staff'}}).name,'PADOVA_V2_Staff_Staging');
 assert.equal(context.doGet({parameter:{ui:'owner'}}).name,'PADOVA_V2_Owner_Staging');
+assert.equal(context.doGet({parameter:{ui:'dispatch'}}).name,'PADOVA_V2_Dispatch_Staging');
+assert.equal(context.doGet({parameter:{ui:'dispatch-owner'}}).name,'PADOVA_V2_Dispatch_Staging');
+assert.equal(context.doGet({parameter:{ui:'dispatch'}}).ownerMode,false);
+assert.equal(context.doGet({parameter:{ui:'dispatch-owner'}}).ownerMode,true);
 assert.equal(context.setupPadovaV2Staging(),'Staging tables ready');
 const token='test-secret-device-token';
 props.set('PADOVA_V2_STAGING_DEVICE_SHA256',crypto.createHash('sha256').update(token).digest('hex'));
@@ -164,4 +177,51 @@ assert.equal(context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',devi
 assert.equal(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',requestId:'daily-finished-fix',deviceToken:token}).duplicate,true);
 assert.match(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:5,staffId:'STAFF',requestId:'over-fix',deviceToken:token}).message,/exceeds finished goods recorded today/);
 assert.equal(sheets['Goods Receipts'].rows.length,receiptsBefore);
+// Confirmed SO reserves finished stock, but only a physical SJ dispatch posts
+// DISPATCH_OUT. Staff get quantity-only data; owner can override another SO's
+// reservation but still cannot overship or make physical stock negative.
+const dispatchLookup=context.v2StaffApi({action:'dispatchLookup',soNo:'SO-V2-001',deviceToken:token});
+assert.equal(dispatchLookup.ok,true);
+assert.equal(dispatchLookup.so.status,'CONFIRMED');
+assert.equal(dispatchLookup.items[0].onHand,8);
+assert.equal(dispatchLookup.items[0].reserved,11);
+assert.equal(dispatchLookup.items[0].available,-3);
+assert.equal(dispatchLookup.items[0].dispatchable,4);
+assert.equal('unitCost' in dispatchLookup.items[0],false);
+assert.equal('total' in dispatchLookup,false);
+const receiptCount=sheets['Goods Receipts'].rows.length;
+const purchaseCount=sheets['Purchasing'].rows.length;
+const departure={action:'dispatchConfirm',deviceToken:token,requestId:'dispatch-001',staffId:'STAF 1',soNo:'SO-V2-001',sjNo:'SJ-DEMO-001',itemCode:'TEST-PILLOW',qty:3};
+const firstDispatch=context.v2StaffApi(departure);
+assert.equal(firstDispatch.ok,true);
+assert.equal(firstDispatch.stockAfter,5);
+assert.equal(firstDispatch.soRemaining,4);
+assert.equal(sheets['Stock Movements'].rows.at(-1)[4],'DISPATCH_OUT');
+assert.equal(sheets['Dispatches'].rows.length,2);
+assert.equal(context.v2StaffApi(departure).duplicate,true);
+assert.equal(sheets['Dispatches'].rows.length,2);
+assert.equal(context.v2StaffApi({action:'dispatchLookup',soNo:'SO-V2-001',deviceToken:token}).items[0].remaining,4);
+assert.match(context.v2StaffApi({...departure,requestId:'dispatch-002',sjNo:'SJ-DEMO-002',qty:2}).message,/reserved for another SO/);
+assert.match(context.v2StaffApi({...departure,requestId:'dispatch-003',sjNo:'SJ-DEMO-003',qty:1,overrideReservation:true}).message,/Only owner/);
+assert.match(context.v2StaffApi({...departure,requestId:'dispatch-pending',soNo:'SO-V2-003',sjNo:'SJ-DEMO-PEND',qty:1}).message,/CONFIRMED/);
+assert.match(context.v2StaffApi({...departure,requestId:'dispatch-over',sjNo:'SJ-DEMO-OVER',qty:8}).message,/exceeds undelivered/);
+const secondDispatch=context.v2OwnerApi({...departure,requestId:'dispatch-owner-1',sjNo:'SJ-DEMO-002',qty:2,overrideReservation:true});
+assert.equal(secondDispatch.ok,true);
+assert.equal(secondDispatch.stockAfter,3);
+assert.equal(context.v2OwnerApi({...departure,requestId:'dispatch-owner-1',sjNo:'SJ-DEMO-002',qty:2,overrideReservation:true}).duplicate,true);
+assert.match(context.v2OwnerApi({...departure,requestId:'dispatch-duplicate-sj',sjNo:'SJ-DEMO-001',qty:1,overrideReservation:true}).message,/already recorded on the same Surat Jalan/);
+const correction={action:'dispatchCorrect',requestId:'dispatch-correction-001',staffId:'OWNER',dispatchId:firstDispatch.dispatchId,qty:1,reason:'Wrong quantity'};
+const fixed=context.v2OwnerApi(correction);
+assert.equal(fixed.ok,true);
+assert.equal(fixed.stockAfter,4);
+assert.equal(fixed.dispatchRemaining,2);
+assert.equal(sheets['Stock Movements'].rows.at(-1)[4],'DISPATCH_CORRECTION_IN');
+assert.equal(context.v2OwnerApi(correction).duplicate,true);
+assert.match(context.v2OwnerApi({...correction,requestId:'dispatch-correction-over',qty:3}).message,/exceeds the net dispatched/);
+const ownerDispatchData=context.v2OwnerApi({action:'dispatchSnapshot'});
+assert.equal(ownerDispatchData.ok,true);
+assert.equal(ownerDispatchData.dispatches.find(d=>d.id===firstDispatch.dispatchId).net,2);
+assert.equal(ownerDispatchData.availability.find(r=>r.itemCode==='TEST-PILLOW').onHand,4);
+assert.equal(sheets['Goods Receipts'].rows.length,receiptCount);
+assert.equal(sheets['Purchasing'].rows.length,purchaseCount);
 console.log('PASS: staff receipts/reversals, owner matching, daily materials + correction, finished production + correction, idempotency, and no double stock');
