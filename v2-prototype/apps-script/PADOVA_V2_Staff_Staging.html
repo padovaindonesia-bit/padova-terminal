@@ -99,10 +99,11 @@
     $('supplierDocGroup').hidden=finished;
     if(finished)$('supplierDoc').value='';
     $('qty').step=finished?'1':'any';$('qty').min=finished?'1':'0.001';
+    $('stockIn').textContent=!finished&&currentItem?.type==='RAW_MATERIAL'&&!$('supplierDoc').value.trim()&&currentItem.todayQty>0?'KOREKSI +':'MASUK';
     $('stockOut').textContent=finished?'KOREKSI −':'KELUAR';
     $('actionHint').textContent=finished
       ?'Barang jadi: MASUK untuk hasil produksi yang sudah selesai dan dikemas. KOREKSI − hanya untuk membetulkan catatan hari ini. Pengiriman akan dikurangi otomatis melalui dispatch.'
-      :'Bahan baku: MASUK dengan nomor invoice / SO supplier. KELUAR tanpa nomor dokumen untuk bahan dipakai; dengan nomor yang sama untuk koreksi penerimaan yang belum dicocokkan.';
+      :'Bahan baku: MASUK + nomor invoice / SO supplier = barang diterima. KELUAR tanpa nomor = bahan dipakai. KOREKSI + tanpa nomor = membetulkan pemakaian hari ini. KELUAR + nomor supplier = koreksi penerimaan yang belum dicocokkan.';
   }
   function runServer(payload) {
     return new Promise((resolve,reject) => {
@@ -118,7 +119,7 @@
       busy=true;renderDisabled();
       const result=await runServer({action:'itemLookup',itemCode:code,deviceToken});
       if(!result?.ok)throw Error(result?.message||'Barang tidak ditemukan.');
-      currentItem={code:result.itemCode,name:result.itemName,type:result.itemType,unit:result.unit};
+      currentItem={code:result.itemCode,name:result.itemName,type:result.itemType,unit:result.unit,todayQty:Number(result.todayQty)||0};
       $('itemName').textContent=result.itemName; $('itemCodeLabel').textContent=result.itemCode;
       $('itemStock').textContent=result.stockAfter; $('itemUnit').textContent=result.unit;
       $('todayNote').textContent=(result.itemType==='FINISHED_GOODS'?'Selesai & dikemas hari ini: ':'Bahan dipakai hari ini: ')+(Number(result.todayQty)||0)+' '+result.unit;
@@ -140,7 +141,8 @@
       ensureDevice();busy=true;renderDisabled();
       const response=await runServer({...pending,deviceToken});
       if(!response?.ok)throw Error(response?.message||'Gagal mencatat stok.');
-      const label=pending.itemType==='FINISHED_GOODS'?(pending.action==='stockIn'?'PRODUKSI SELESAI':'KOREKSI PRODUKSI'):(pending.action==='stockIn'?'MASUK':'KELUAR');
+      const label=pending.itemType==='FINISHED_GOODS'?(pending.action==='stockIn'?'PRODUKSI SELESAI':'KOREKSI PRODUKSI'):
+        response.movementType==='MATERIAL_ISSUE_CORRECTION_IN'?'KOREKSI PEMAKAIAN':(pending.action==='stockIn'?'MASUK':'KELUAR');
       const message=`Tersimpan: ${label} ${pending.qty} ${pending.unit||currentItem?.unit||''}. Stok sekarang ${response.stockAfter}. ${response.duplicate?'Permintaan lama dikenali; stok tidak dihitung dua kali.':''}\nSiap untuk transaksi berikutnya.`;
       pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();status(message);
     } catch(err) { status(`Belum dapat memastikan hasil transaksi: ${err.message||String(err)}. Gunakan COBA LAGI dengan ID transaksi yang sama.`, 'warn'); }
@@ -153,7 +155,7 @@
       const qty=Number($('qty').value),staffId=$('staffId').value.trim(),supplierDoc=$('supplierDoc').value.trim();
       if(!Number.isFinite(qty)||qty<=0)throw Error('Jumlah harus lebih besar dari nol.');
       if(currentItem.type==='FINISHED_GOODS'&&!Number.isInteger(qty))throw Error('Barang jadi harus dicatat dalam jumlah satuan utuh.');
-      if(currentItem.type==='RAW_MATERIAL'&&action==='stockIn'&&!supplierDoc)throw Error('Masukkan nomor invoice atau SO supplier untuk barang diterima.');
+      if(currentItem.type==='RAW_MATERIAL'&&action==='stockIn'&&!supplierDoc&&qty>currentItem.todayQty)throw Error('Untuk penerimaan, masukkan nomor invoice / SO supplier. Koreksi tanpa nomor hanya sebanyak bahan dipakai hari ini.');
       if(!staffId)throw Error('Nama atau kode staf wajib diisi.');
       pending={action,itemCode:currentItem.code,itemType:currentItem.type,unit:currentItem.unit,qty,staffId,supplierDoc,requestId:crypto.randomUUID()};
       sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending));renderPending();sendPending();
@@ -165,6 +167,7 @@
   $('qty').addEventListener('focus',event=>event.target.select());
   document.querySelectorAll('[data-step]').forEach(button=>button.onclick=()=>{const value=Math.max(0,(Number($('qty').value)||0)+Number(button.dataset.step));$('qty').value=value||'';$('qty').focus();});
   $('clearQty').onclick=()=>{$('qty').value='';$('qty').focus();};
+  $('supplierDoc').addEventListener('input',renderItemActions);
   $('stockIn').onclick=()=>submit('stockIn');$('stockOut').onclick=()=>submit('stockOut');
   $('retry').onclick=sendPending;
   $('discard').onclick=()=>{if(!pending)return;if(!confirm('Batalkan permintaan yang tertunda? Pastikan dulu apakah pergerakan sudah tercatat di sandbox.'))return;pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();renderPending();status('Permintaan tertunda dibatalkan. Periksa histori stok bila hasil sebelumnya tidak pasti.','warn');};
