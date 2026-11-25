@@ -7,7 +7,7 @@
 <main><div class="note"><b>Demo data only.</b> Transactions remain in this browser. No current Google Sheets, Apps Script, or Terminal data is affected. Owner mode is not authenticated in this prototype—do not enter real financial information.</div>
 <div class="tabs"><button id="staffTab" class="active">Staff Terminal</button><button id="ownerTab">Owner Purchasing</button></div>
 <section id="staff"><div class="grid"><div class="card"><h1>Stock</h1><p class="muted">Choose a test item to simulate scanning its QR code.</p><label>Item</label><select id="stockItem"></select><label>Quantity</label><div class="qty"><input id="stockQty" type="number" inputmode="numeric" min="1" step="1" value="1"><span id="stockUnit">ball</span></div><div class="stepper"><button data-qty="-1">−1</button><button data-qty="1">+1</button><button data-qty="5">+5</button><button data-qty="10">+10</button><button id="clearQty">Clear</button></div><label>Staff</label><input id="staffName" value="DEMO STAFF"><label>Supplier Invoice No. / SO (optional)</label><input id="supplierDoc" placeholder="As shown on supplier's document"><div class="actions"><button class="primary" id="inButton">MASUK</button><button id="outButton">KELUAR</button></div><div class="status" id="stockStatus"></div></div><div class="card"><h2>Current Stock</h2><div id="stockList"></div><h2 style="margin-top:25px">Recent Movements</h2><div id="movementList"></div></div></div></section>
-<section id="owner"><div class="grid"><div class="card"><h1 id="purchaseHeading">New Purchase</h1><p class="muted">Supplier invoice and stock receipt are separate records.</p><div class="good" id="editNotice" style="display:none">Editing existing purchase. Correct the quantity or matching and save changes.</div><label>Supplier</label><input id="supplier" value="DEMO SUPPLIER"><label>Supplier Invoice No.</label><input id="invoice" value="TEST-INV-001"><label>Item</label><select id="purchaseItem"></select><label>Invoice Qty (operational unit)</label><input id="invoiceQty" type="number" inputmode="decimal" min="1" step="any" value="20"><label>Unit Cost (demo Rp)</label><input id="unitCost" type="number" inputmode="decimal" min="0" value="22000"><label>Match Goods Receipt</label><div id="matchHint" class="muted">Enter the supplier invoice number to see matching receipts.</div><div id="receiptOptions"></div><label style="font-weight:400"><input id="showAllReceipts" type="checkbox" style="width:auto;min-height:0"> Show other unmatched receipts (manual matching)</label><button class="primary wide" id="purchaseButton">SAVE PURCHASE</button><button class="wide" id="newPurchase">NEW PURCHASE / CANCEL EDIT</button><div class="status" id="purchaseStatus"></div></div><div class="card"><h2>Unmatched Goods Receipts</h2><div id="unmatchedList"></div><h2 style="margin-top:24px">Purchasing History</h2><p class="muted">Edit a saved invoice here if its quantity or matching was incorrect.</p><div id="purchaseList"></div></div></div></section>
+<section id="owner"><div class="grid"><div class="card"><h1 id="purchaseHeading">New Purchase</h1><p class="muted">Supplier invoice and stock receipt are separate records.</p><div class="good" id="editNotice" style="display:none">Editing existing purchase. Correct the quantity or matching and save changes.</div><label>Supplier</label><input id="supplier" value="DEMO SUPPLIER"><label>Supplier Invoice No.</label><input id="invoice" value="TEST-INV-001"><label>Item</label><select id="purchaseItem"></select><label>Invoice Qty (operational unit)</label><input id="invoiceQty" type="number" inputmode="decimal" min="1" step="any" value="20"><label>Unit Cost (demo Rp)</label><input id="unitCost" type="number" inputmode="decimal" min="0" value="22000"><label>Match Goods Receipt</label><div id="matchHint" class="muted">Enter the supplier invoice number to see matching receipts.</div><div id="receiptOptions"></div><div id="matchQuantityNotice" style="font-size:13px;color:#9c6315;margin-top:8px"></div><label style="font-weight:400"><input id="showAllReceipts" type="checkbox" style="width:auto;min-height:0"> Show other unmatched receipts (manual matching)</label><button class="primary wide" id="purchaseButton">SAVE PURCHASE</button><button class="wide" id="newPurchase">NEW PURCHASE / CANCEL EDIT</button><div class="status" id="purchaseStatus"></div></div><div class="card"><h2>Unmatched Goods Receipts</h2><div id="unmatchedList"></div><h2 style="margin-top:24px">Purchasing History</h2><p class="muted">Edit a saved invoice here if its quantity or matching was incorrect.</p><div id="purchaseList"></div></div></div></section>
 <div class="card"><button id="resetButton">Reset demo data</button><p class="muted">Only clears this browser's demo entries.</p></div></main><script>
 // PADOVA V2 staging prototype. Local demo data only; no production integrations.
 const DEMO_ITEMS = [{code:'HCSSP01',name:'Dacron',unit:'ball',opening:8},{code:'PEKM03',name:'Padding',unit:'ball',opening:1}];
@@ -47,6 +47,13 @@ function suggestedReceipts(state,{invoice,itemCode}){
   const reference=String(invoice??'').trim().toUpperCase();
   if(!reference)return [];
   return state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===reference&&unmatchedQty(state,r.id)>0);
+}
+function selectedReceiptQuantity(state,receiptIds,editingPurchaseId=null){
+  const existing=state.purchases.find(p=>p.id===editingPurchaseId);
+  return [...new Set(receiptIds)].reduce((total,id)=>{
+    const previouslyAllocated=existing?.receiptAllocations?.find(a=>a.receiptId===id)?.qty??0;
+    return total+unmatchedQty(state,id)+previouslyAllocated;
+  },0);
 }
 function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[]}){
   if(!invoice||!supplier||!state.items.some(x=>x.code===itemCode)||!validQty(invoiceQty)||!Number.isFinite(Number(unitCost))||Number(unitCost)<0)throw Error('Complete supplier, invoice, item, quantity and cost');
@@ -92,6 +99,19 @@ function message(id,s,bad=false){const e=$(id);e.textContent=s;e.style.display='
 function showStaff(show){$('staff').style.display=show?'block':'none';$('owner').style.display=show?'none':'block';$('staffTab').className=show?'active':'';$('ownerTab').className=show?'':'active';draw();}
 function editPurchase(id){const p=state.purchases.find(x=>x.id===id);if(!p)return;editingId=id;$('supplier').value=p.supplier;$('invoice').value=p.invoice;$('purchaseItem').value=p.itemCode;$('invoiceQty').value=p.invoiceQty;$('unitCost').value=p.unitCost;draw();$('purchaseHeading').textContent='Edit Purchase';$('editNotice').style.display='block';$('purchaseButton').textContent='SAVE CHANGES';$('purchaseHeading').scrollIntoView({behavior:'smooth'});}
 function newPurchase(){editingId=null;$('purchaseHeading').textContent='New Purchase';$('editNotice').style.display='none';$('purchaseButton').textContent='SAVE PURCHASE';$('supplier').value='DEMO SUPPLIER';$('invoice').value='';$('invoiceQty').value='';$('unitCost').value='';$('showAllReceipts').checked=false;draw();}
+function checkedReceiptIds(){return [...document.querySelectorAll('.receiptPick:checked')].map(x=>x.dataset.id);}
+function refreshQuantityRelation(){
+ const ids=checkedReceiptIds();
+ const selected=ids.length?selectedReceiptQuantity(state,ids,editingId):0;
+ const entered=Number($('invoiceQty').value);
+ const relation=ids.length&&entered>0&&selected!==entered?` Selected receipt qty ${selected}; purchasing qty ${entered}. Difference: ${Math.abs(selected-entered)}.`:'';
+ $('matchQuantityNotice').textContent=relation;
+}
+function syncQuantityFromCheckedReceipts(){
+ const ids=checkedReceiptIds();
+ $('invoiceQty').value=ids.length?selectedReceiptQuantity(state,ids,editingId):'';
+ refreshQuantityRelation();
+}
 function draw(){
  $('stockUnit').textContent=state.items.find(x=>x.code===$('stockItem').value)?.unit??'';
  $('stockList').innerHTML=state.items.map(i=>`<div class="line"><span><b>${esc(i.name)}</b><small>${esc(i.code)}</small></span><span class="summary">${balance(state,i.code)} <small style="display:inline">${esc(i.unit)}</small></span></div>`).join('');
@@ -105,13 +125,15 @@ function draw(){
  const suggested=candidates.filter(r=>doc&&String(r.supplierDoc||'').trim().toUpperCase()===doc);
  $('matchHint').textContent=suggested.length?`${suggested.length} receipt(s) found under this invoice number. Confirm by checking the box.`:'No matching receipt found under this invoice number. You may still save as Pending Matching or show other receipts.';
  $('receiptOptions').innerHTML=candidates.map(r=>{const prev=current.find(a=>a.receiptId===r.id)?.qty??0;const max=unmatchedQty(state,r.id)+prev;const match=doc&&String(r.supplierDoc||'').trim().toUpperCase()===doc;return `<label class="receipt"><input type="checkbox" class="receiptPick" data-id="${esc(r.id)}" ${prev?'checked':''}> <b>${esc(itemName(r.itemCode))} — ${max} ${esc(state.items.find(i=>i.code===r.itemCode)?.unit)} available</b><small>Supplier ref: ${esc(r.supplierDoc||'none')} ${match?'· Suggested match':'· Manual match'}</small></label>`}).join('');
+ document.querySelectorAll('.receiptPick').forEach(box=>box.onchange=syncQuantityFromCheckedReceipts);
  const quantity=Number($('invoiceQty').value);
  const totalSuggested=suggested.reduce((n,r)=>n+unmatchedQty(state,r.id)+(current.find(a=>a.receiptId===r.id)?.qty??0),0);
  if(suggested.length&&quantity>0&&totalSuggested!==quantity)$('matchHint').textContent+=` Quantity discrepancy: invoice ${quantity}, available receipt quantity ${totalSuggested}. Review before saving.`;
+ refreshQuantityRelation();
 }
 function selectedAllocations(){let remaining=Number($('invoiceQty').value);const existing=state.purchases.find(p=>p.id===editingId);return [...document.querySelectorAll('.receiptPick:checked')].map(e=>{const prev=existing?.receiptAllocations?.find(a=>a.receiptId===e.dataset.id)?.qty??0;const qty=Math.max(0,Math.min(remaining,unmatchedQty(state,e.dataset.id)+prev));remaining-=qty;return {receiptId:e.dataset.id,qty}}).filter(x=>x.qty>0);}
 $('staffTab').onclick=()=>showStaff(true);$('ownerTab').onclick=()=>showStaff(false);$('stockItem').onchange=draw;$('purchaseItem').onchange=()=>{if(editingId){const p=state.purchases.find(x=>x.id===editingId);if(p&&p.itemCode!==$('purchaseItem').value)message('purchaseStatus','Changing items removes previous allocations; review before saving.',true)}draw()};
-$('invoice').oninput=draw;$('showAllReceipts').onchange=draw;$('invoiceQty').oninput=draw;
+$('invoice').oninput=draw;$('showAllReceipts').onchange=draw;$('invoiceQty').oninput=refreshQuantityRelation;
 document.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{$('stockQty').value=Math.max(0,(Number($('stockQty').value)||0)+Number(b.dataset.qty));});
 $('clearQty').onclick=()=>{$('stockQty').value='';$('stockQty').focus()};$('stockQty').onclick=e=>e.target.select();
 $('inButton').onclick=()=>{try{const r=receiveGoods(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:$('supplierDoc').value.trim(),requestId:crypto.randomUUID()});persist();message('stockStatus',`Received ${r.receipt.qty}. Reference: ${r.receipt.supplierDoc||'not provided'}. Stock is now ${balance(state,r.receipt.itemCode)}.`)}catch(e){message('stockStatus',e.message,true)}};
