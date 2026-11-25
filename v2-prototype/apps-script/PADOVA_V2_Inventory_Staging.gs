@@ -152,6 +152,7 @@ function v2ItemStats_(ss,item){
       if(r[4]==='PRODUCTION_FINISHED')result.todayFinished+=qty;
       if(r[4]==='PRODUCTION_CORRECTION_OUT')result.todayFinished-=qty;
       if(r[4]==='MATERIAL_ISSUE')result.todayMaterial+=qty;
+      if(r[4]==='MATERIAL_ISSUE_CORRECTION_IN')result.todayMaterial-=qty;
     }
   });
   return result;
@@ -179,7 +180,25 @@ function v2StockIn_(body){return v2Lock_(function(ss){
     const movement=v2AppendMovement_(ss,req,item,'PRODUCTION_FINISHED','IN',qty,'PROD-'+day,staff,'Finished and packed');
     return {movementId:movement.id,duplicate:movement.duplicate,stockAfter:movement.stock,movementType:'PRODUCTION_FINISHED'};
   }
-  if(!doc)throw Error('Supplier invoice or sales order reference is required for material receipts');
+  // A raw-material MASUK without a supplier reference is never a new receipt:
+  // it can only correct raw material recorded as used earlier *today*.
+  // This keeps receipt stock and production corrections separate, while
+  // preserving the staff's familiar MASUK/KELUAR controls.
+  if(!doc){
+    const prior=v2Movement_(ss,req);
+    if(prior){
+      if(prior[4]!=='MATERIAL_ISSUE_CORRECTION_IN'||v2Code_(prior[3])!==v2Code_(item.itemCode)||Number(prior[6])!==qty){
+        throw Error('Request ID already used for another action');
+      }
+      return {movementId:String(prior[0]),duplicate:true,stockAfter:v2Stock_(ss,item),movementType:'MATERIAL_ISSUE_CORRECTION_IN'};
+    }
+    if(qty>v2ItemStats_(ss,item).todayMaterial){
+      throw Error('Supplier invoice or sales order reference is required for receipts; material correction exceeds usage recorded today');
+    }
+    const day=Utilities.formatDate(new Date(),'Asia/Jakarta','yyyy-MM-dd');
+    const correction=v2AppendMovement_(ss,req,item,'MATERIAL_ISSUE_CORRECTION_IN','IN',qty,'MATERIAL-'+day,staff,'Same-day material usage correction');
+    return {movementId:correction.id,duplicate:correction.duplicate,stockAfter:correction.stock,movementType:'MATERIAL_ISSUE_CORRECTION_IN'};
+  }
   const previous=v2Movement_(ss,req);
   if(previous&&(previous[4]!=='GOODS_RECEIPT'||v2Code_(previous[3])!==v2Code_(item.itemCode)||Number(previous[6])!==qty))throw Error('Request ID already used for a different transaction');
   let receipt=v2ReceiptByRequest_(ss,req);
