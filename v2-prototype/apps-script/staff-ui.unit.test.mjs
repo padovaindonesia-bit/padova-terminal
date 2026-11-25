@@ -33,7 +33,8 @@ const scriptRun={
       const duplicate=seen.has(payload.requestId);
       if(!duplicate){if(payload.itemCode==='TEST-PILLOW')finishedStock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);else stock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);seen.add(payload.requestId)}
       if(failFirstWrite){failFirstWrite=false;return this.failure(Error('Network reply lost'))}
-      this.success({ok:true,duplicate,stockAfter:payload.itemCode==='TEST-PILLOW'?finishedStock:stock});
+      this.success({ok:true,duplicate,stockAfter:payload.itemCode==='TEST-PILLOW'?finishedStock:stock,
+        movementType:payload.itemCode!=='TEST-PILLOW'&&payload.action==='stockIn'&&!payload.supplierDoc?'MATERIAL_ISSUE_CORRECTION_IN':undefined});
     });
   }
 };
@@ -62,6 +63,15 @@ assert.equal(elements.supplierDoc.value,'');
 assert.equal(elements.staffId.value,'');
 assert.equal(elements.pending.style.display,'none');
 assert.equal(storage.getItem('padova-v2-staff-staging-pending-v1'),null);
+elements.itemCode.value='TEST-DACRON';elements.lookup.click();await settle();
+assert.equal(elements.stockIn.textContent,'KOREKSI +','Raw material MASUK without supplier reference must show correction meaning');
+elements.supplierDoc.value='SUPPLIER-123';elements.supplierDoc.listeners.input();
+assert.equal(elements.stockIn.textContent,'MASUK','Supplier reference restores raw-material receipt action');
+elements.supplierDoc.value='';elements.supplierDoc.listeners.input();
+elements.staffId.value='STAFF 1';elements.qty.value='1';elements.stockIn.click();await settle();
+assert.equal(stock,28,'Same-day material usage correction must restore stock');
+assert.match(elements.status.textContent,/KOREKSI PEMAKAIAN/);
+assert.equal(calls.at(-1).supplierDoc,'','Material usage correction must not create supplier data');
 elements.itemCode.value='TEST-PILLOW';elements.lookup.click();await settle();
 assert.equal(elements.supplierDocGroup.hidden,true,'Supplier reference must disappear for finished goods');
 assert.equal(elements.stockOut.textContent,'KOREKSI −');
@@ -73,4 +83,4 @@ assert.equal(elements.qty.value,'','Production must reset the staff quantity inp
 elements.itemCode.value='TEST-PILLOW';elements.lookup.click();await settle();
 elements.staffId.value='STAFF 1';elements.qty.value='1';elements.stockOut.click();await settle();
 assert.equal(finishedStock,6,'Same-day correction must reduce finished stock');
-console.log('PASS: staff auth, retries, no prices, raw receipts, finished production/corrections, and form reset');
+console.log('PASS: staff auth, retries, no prices, raw receipts/usage corrections, finished production/corrections, and form reset');
