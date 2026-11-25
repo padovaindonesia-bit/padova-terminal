@@ -61,13 +61,13 @@
     <label for="itemCode">Kode barang / hasil scan QR</label>
     <div class="row"><input id="itemCode" autocapitalize="characters" autocomplete="off" placeholder="Contoh: TEST-DACRON"><button id="lookup" class="ghost" type="button">Cari</button></div>
     <p class="subtle">Untuk uji awal, ketik kode barang lalu tekan Cari. Kamera QR akan disambungkan setelah pengujian ini.</p>
-    <div id="itemCard" class="item" aria-live="polite"><b id="itemName"></b><span id="itemCodeLabel"></span><div class="stock"><span id="itemStock"></span> <small id="itemUnit"></small></div><span class="subtle">Stok saat ini di sandbox</span></div>
+    <div id="itemCard" class="item" aria-live="polite"><b id="itemName"></b><span id="itemCodeLabel"></span><div class="stock"><span id="itemStock"></span> <small id="itemUnit"></small></div><span class="subtle">Stok saat ini di sandbox</span><p class="subtle" id="todayNote"></p></div>
     <label for="qty">Jumlah</label>
     <input id="qty" type="number" inputmode="decimal" min="0.001" step="any" placeholder="Masukkan jumlah">
     <div class="qtytools"><button type="button" data-step="-1">−1</button><button type="button" data-step="1">+1</button><button type="button" data-step="5">+5</button><button type="button" id="clearQty">Hapus</button></div>
-    <label for="supplierDoc">No. invoice / SO supplier (opsional)</label>
-    <input id="supplierDoc" autocomplete="off" placeholder="Sesuai dokumen supplier">
-    <p class="subtle"><b>MASUK:</b> mencatat barang diterima. <b>KELUAR:</b> dengan nomor dokumen yang sama membalikkan penerimaan yang belum dicocokkan; tanpa nomor dokumen mencatat bahan diambil.</p>
+    <div id="supplierDocGroup"><label for="supplierDoc">No. invoice / SO supplier</label>
+    <input id="supplierDoc" autocomplete="off" placeholder="Sesuai dokumen supplier"></div>
+    <p class="subtle" id="actionHint">Untuk bahan baku: MASUK dengan nomor dokumen supplier, KELUAR tanpa nomor dokumen untuk bahan dipakai.</p>
     <div class="actions"><button class="primary" id="stockIn" type="button">MASUK</button><button class="out" id="stockOut" type="button">KELUAR</button></div>
     <div id="status" class="status" role="status" aria-live="polite"></div>
     <div id="pending" class="pending"><p id="pendingDetail"></p><div class="row"><button id="retry" class="primary" type="button">COBA LAGI</button><button id="discard" type="button">BATALKAN</button></div><p class="subtle">Coba lagi menggunakan ID transaksi yang sama, jadi stok tidak terhitung dua kali. Batalkan hanya setelah memastikan catatan di sandbox.</p></div>
@@ -94,6 +94,16 @@
     document.querySelectorAll('[data-step]').forEach(b=>b.disabled=locked);
     $('clearQty').disabled=locked;
   }
+  function renderItemActions() {
+    const finished=currentItem?.type==='FINISHED_GOODS';
+    $('supplierDocGroup').hidden=finished;
+    if(finished)$('supplierDoc').value='';
+    $('qty').step=finished?'1':'any';$('qty').min=finished?'1':'0.001';
+    $('stockOut').textContent=finished?'KOREKSI −':'KELUAR';
+    $('actionHint').textContent=finished
+      ?'Barang jadi: MASUK untuk hasil produksi yang sudah selesai dan dikemas. KOREKSI − hanya untuk membetulkan catatan hari ini. Pengiriman akan dikurangi otomatis melalui dispatch.'
+      :'Bahan baku: MASUK dengan nomor invoice / SO supplier. KELUAR tanpa nomor dokumen untuk bahan dipakai; dengan nomor yang sama untuk koreksi penerimaan yang belum dicocokkan.';
+  }
   function runServer(payload) {
     return new Promise((resolve,reject) => {
       if(!window.google?.script?.run){ reject(Error('Buka halaman ini melalui Apps Script test deployment.')); return; }
@@ -108,9 +118,11 @@
       busy=true;renderDisabled();
       const result=await runServer({action:'itemLookup',itemCode:code,deviceToken});
       if(!result?.ok)throw Error(result?.message||'Barang tidak ditemukan.');
-      currentItem={code:result.itemCode,name:result.itemName,unit:result.unit};
+      currentItem={code:result.itemCode,name:result.itemName,type:result.itemType,unit:result.unit};
       $('itemName').textContent=result.itemName; $('itemCodeLabel').textContent=result.itemCode;
       $('itemStock').textContent=result.stockAfter; $('itemUnit').textContent=result.unit;
+      $('todayNote').textContent=(result.itemType==='FINISHED_GOODS'?'Selesai & dikemas hari ini: ':'Bahan dipakai hari ini: ')+(Number(result.todayQty)||0)+' '+result.unit;
+      renderItemActions();
       $('itemCard').style.display='block';
       status('Barang ditemukan. Masukkan jumlah dan pilih MASUK atau KELUAR.');
       $('qty').focus();
@@ -120,6 +132,7 @@
   function resetEntry() {
     currentItem=null;$('itemCard').style.display='none';
     for(const id of ['staffId','itemCode','qty','supplierDoc'])$(id).value='';
+    renderItemActions();
   }
   async function sendPending() {
     if(!pending)return;
@@ -127,7 +140,8 @@
       ensureDevice();busy=true;renderDisabled();
       const response=await runServer({...pending,deviceToken});
       if(!response?.ok)throw Error(response?.message||'Gagal mencatat stok.');
-      const message=`Tersimpan: ${pending.action==='stockIn'?'MASUK':'KELUAR'} ${pending.qty} ${currentItem?.unit||''}. Stok sekarang ${response.stockAfter}. ${response.duplicate?'Permintaan lama dikenali; stok tidak ditambah dua kali.':''}\nSiap untuk transaksi berikutnya.`;
+      const label=pending.itemType==='FINISHED_GOODS'?(pending.action==='stockIn'?'PRODUKSI SELESAI':'KOREKSI PRODUKSI'):(pending.action==='stockIn'?'MASUK':'KELUAR');
+      const message=`Tersimpan: ${label} ${pending.qty} ${pending.unit||currentItem?.unit||''}. Stok sekarang ${response.stockAfter}. ${response.duplicate?'Permintaan lama dikenali; stok tidak dihitung dua kali.':''}\nSiap untuk transaksi berikutnya.`;
       pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();status(message);
     } catch(err) { status(`Belum dapat memastikan hasil transaksi: ${err.message||String(err)}. Gunakan COBA LAGI dengan ID transaksi yang sama.`, 'warn'); }
     finally { busy=false;renderPending(); }
@@ -138,8 +152,10 @@
       if(!currentItem||$('itemCode').value.trim().toUpperCase()!==currentItem.code.toUpperCase())throw Error('Cari dan konfirmasi barang terlebih dahulu.');
       const qty=Number($('qty').value),staffId=$('staffId').value.trim(),supplierDoc=$('supplierDoc').value.trim();
       if(!Number.isFinite(qty)||qty<=0)throw Error('Jumlah harus lebih besar dari nol.');
+      if(currentItem.type==='FINISHED_GOODS'&&!Number.isInteger(qty))throw Error('Barang jadi harus dicatat dalam jumlah satuan utuh.');
+      if(currentItem.type==='RAW_MATERIAL'&&action==='stockIn'&&!supplierDoc)throw Error('Masukkan nomor invoice atau SO supplier untuk barang diterima.');
       if(!staffId)throw Error('Nama atau kode staf wajib diisi.');
-      pending={action,itemCode:currentItem.code,qty,staffId,supplierDoc,requestId:crypto.randomUUID()};
+      pending={action,itemCode:currentItem.code,itemType:currentItem.type,unit:currentItem.unit,qty,staffId,supplierDoc,requestId:crypto.randomUUID()};
       sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending));renderPending();sendPending();
     } catch(err) { status(err.message||String(err),'error'); }
   }
@@ -153,6 +169,7 @@
   $('retry').onclick=sendPending;
   $('discard').onclick=()=>{if(!pending)return;if(!confirm('Batalkan permintaan yang tertunda? Pastikan dulu apakah pergerakan sudah tercatat di sandbox.'))return;pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();renderPending();status('Permintaan tertunda dibatalkan. Periksa histori stok bila hasil sebelumnya tidak pasti.','warn');};
   if(pending)status('Ada transaksi tertunda dari sesi ini. Aktifkan token dan pilih COBA LAGI.','warn');
+  renderItemActions();
   renderPending();
 })();
 </script>
