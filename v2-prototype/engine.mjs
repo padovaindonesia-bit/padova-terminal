@@ -22,10 +22,33 @@ export function receiveGoods(state,{itemCode,qty,staff='Staff',supplierDoc='',re
   const existing=state.receipts.find(x=>x.requestId===requestId);
   if(existing)return {receipt:existing,duplicate:true};
   if(!validQty(qty))throw Error('Quantity must be positive');
-  const receipt={id:`GR-${crypto.randomUUID()}`,requestId,itemCode,qty:Number(qty),staff,supplierDoc,time:new Date().toISOString()};
+  const receipt={id:`GR-${crypto.randomUUID()}`,requestId,itemCode,qty:Number(qty),originalQty:Number(qty),staff,supplierDoc,time:new Date().toISOString(),status:'ACTIVE'};
   const movement=postMovement(state,{itemCode,qty,type:'GOODS_RECEIPT',requestId,ref:receipt.id,staff});
   state.receipts.push(receipt);
   return {receipt,movement:movement.movement,duplicate:false};
+}
+export function reverseGoodsReceipt(state,{itemCode,qty,supplierDoc,staff='Staff',requestId}){
+  if(!requestId||!String(supplierDoc??'').trim()||!validQty(qty))throw Error('Item, supplier reference, quantity and request ID required');
+  const prior=state.movements.find(m=>m.requestId===requestId);
+  if(prior)return {movement:prior,duplicate:true};
+  const reference=String(supplierDoc).trim().toUpperCase();
+  const candidates=state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===reference&&unmatchedQty(state,r.id)>0).reverse();
+  let remaining=Number(qty);const adjustments=[];
+  for(const r of candidates){
+    const deduct=Math.min(remaining,unmatchedQty(state,r.id));
+    if(deduct>0)adjustments.push({receipt:r,qty:deduct});
+    remaining-=deduct;
+    if(remaining<=0)break;
+  }
+  if(remaining>0)throw Error('Cannot reverse: no sufficient unmatched goods receipt with this item and invoice number. Ask management to review.');
+  // Post one offsetting movement; the original receipt and transaction remain in history.
+  const result=postMovement(state,{itemCode,qty,type:'CORRECTION_OUT',requestId,staff,ref:adjustments.map(a=>a.receipt.id).join(',')});
+  for(const a of adjustments){
+    const oldQty=a.receipt.qty;a.receipt.qty-=a.qty;
+    if(a.receipt.qty===0)a.receipt.status='REVERSED';
+    (state.corrections??=[]).push({kind:'RECEIPT_REVERSAL',receiptId:a.receipt.id,oldQty,newQty:a.receipt.qty,reason:`KELUAR correction for ${supplierDoc}`,staff,time:new Date().toISOString()});
+  }
+  return {movement:result.movement,duplicate:false,reversedQty:Number(qty)};
 }
 export function unmatchedQty(state,receiptId){
   const receipt=state.receipts.find(x=>x.id===receiptId);if(!receipt)throw Error('Receipt not found');
