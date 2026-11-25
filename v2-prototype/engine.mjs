@@ -32,6 +32,11 @@ export function unmatchedQty(state,receiptId){
   const used=state.purchases.reduce((n,p)=>n+(p.receiptAllocations??[]).filter(a=>a.receiptId===receiptId).reduce((k,a)=>k+a.qty,0),0);
   return Math.max(0,receipt.qty-used);
 }
+export function suggestedReceipts(state,{invoice,itemCode}){
+  const reference=String(invoice??'').trim().toUpperCase();
+  if(!reference)return [];
+  return state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===reference&&unmatchedQty(state,r.id)>0);
+}
 export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[]}){
   if(!invoice||!supplier||!state.items.some(x=>x.code===itemCode)||!validQty(invoiceQty)||!Number.isFinite(Number(unitCost))||Number(unitCost)<0)throw Error('Complete supplier, invoice, item, quantity and cost');
   const existing=id?state.purchases.find(p=>p.id===id):null;
