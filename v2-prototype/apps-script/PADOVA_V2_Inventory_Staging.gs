@@ -3,7 +3,7 @@
  * Do not replace the existing PADOVA Terminal Apps Script with this file.
  *
  * - Only the dedicated V2 sandbox spreadsheet is allowed.
- * - Public web endpoint supports staff stock movements only, authenticated by a
+ * - Staff web endpoint supports physical stock movements only, authenticated by a
  *   private device token. It never returns or accepts prices/payments.
  * - Owner purchasing is restricted to the signed-in Padova owner only.
  *   It never posts inventory movements: stock comes from physical receipts.
@@ -85,13 +85,14 @@ function v2StaffApi(body){
     v2AuthorizeStaff_(body.deviceToken);
     if(body.action==='itemLookup'){
       const ss=v2Open_(),item=v2FindItem_(ss,body.itemCode);
-      return {ok:true,itemCode:item.itemCode,itemName:item.itemName,unit:item.unit,stockAfter:v2Stock_(ss,item)};
+      const stats=v2ItemStats_(ss,item);
+      return {ok:true,itemCode:item.itemCode,itemName:item.itemName,itemType:item.itemType,unit:item.unit,stockAfter:stats.stock,todayQty:item.itemType==='FINISHED_GOODS'?stats.todayFinished:stats.todayMaterial};
     }
     if(!body.requestId||!body.staffId)throw Error('Request ID and staff ID required');
     if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(String(body.requestId))){
       throw Error('Invalid request ID');
     }
-    const result=body.action==='stockIn'?v2Receive_(body):body.action==='stockOut'?v2StockOut_(body):null;
+    const result=body.action==='stockIn'?v2StockIn_(body):body.action==='stockOut'?v2StockOut_(body):null;
     if(!result)throw Error('Unsupported staff action');
     return Object.assign({ok:true},result);
   }catch(err){return {ok:false,message:String(err&&err.message||err)}}
@@ -131,16 +132,31 @@ function v2Lock_(action){
 function v2FindItem_(ss,code){
   const item=v2Rows_(v2Sheet_(ss,'Item Master'),7).find(r=>v2Code_(r[0])===v2Code_(code));
   if(!item||String(item[5]).toUpperCase()!=='YES')throw Error('Item not active or not found');
-  return {itemCode:String(item[0]),itemName:String(item[1]),unit:String(item[3]),opening:Number(item[4])||0};
+  const type=v2Code_(item[2]).replace(/[ -]/g,'_');
+  const itemType=['FINISHED_GOODS','FINISHED_GOOD','FINISHED_PRODUCT'].includes(type)?'FINISHED_GOODS':
+    ['RAW_MATERIAL','RAW_MATERIALS','MATERIAL','PACKAGING'].includes(type)?'RAW_MATERIAL':'';
+  if(!itemType)throw Error('Item type must be Raw Material or Finished Goods');
+  return {itemCode:String(item[0]),itemName:String(item[1]),itemType,unit:String(item[3]),opening:Number(item[4])||0};
 }
 function v2Movement_(ss,requestId){return v2Rows_(v2Sheet_(ss,'Stock Movements'),12).find(r=>String(r[1])===String(requestId))}
-function v2Stock_(ss,item){
+function v2ItemStats_(ss,item){
   const code=v2Code_(item.itemCode);
-  return item.opening+v2Rows_(v2Sheet_(ss,'Stock Movements'),12).reduce(function(total,r){
-    if(v2Code_(r[3])!==code||r[10]!=='POSTED')return total;
-    return total+(r[5]==='IN'?1:-1)*Number(r[6]||0);
-  },0);
+  const today=Utilities.formatDate(new Date(),'Asia/Jakarta','yyyy-MM-dd');
+  const result={stock:Number(item.opening)||0,todayFinished:0,todayMaterial:0};
+  v2Rows_(v2Sheet_(ss,'Stock Movements'),12).forEach(function(r){
+    if(v2Code_(r[3])!==code||r[10]!=='POSTED')return;
+    const qty=Number(r[6])||0;
+    result.stock+=(r[5]==='IN'?1:-1)*qty;
+    const date=r[2] instanceof Date?Utilities.formatDate(r[2],'Asia/Jakarta','yyyy-MM-dd'):String(r[2]||'').slice(0,10);
+    if(date===today){
+      if(r[4]==='PRODUCTION_FINISHED')result.todayFinished+=qty;
+      if(r[4]==='PRODUCTION_CORRECTION_OUT')result.todayFinished-=qty;
+      if(r[4]==='MATERIAL_ISSUE')result.todayMaterial+=qty;
+    }
+  });
+  return result;
 }
+function v2Stock_(ss,item){return v2ItemStats_(ss,item).stock}
 function v2AppendMovement_(ss,requestId,item,type,direction,qty,source,staff,reason){
   const previous=v2Movement_(ss,requestId);
   if(previous){
@@ -154,8 +170,16 @@ function v2AppendMovement_(ss,requestId,item,type,direction,qty,source,staff,rea
   return {id,duplicate:false,stock:current+(direction==='IN'?qty:-qty)};
 }
 function v2ReceiptByRequest_(ss,req){return v2Rows_(v2Sheet_(ss,'Goods Receipts'),12).find(r=>String(r[11])===String(req))}
-function v2Receive_(body){return v2Lock_(function(ss){
+function v2StockIn_(body){return v2Lock_(function(ss){
   const item=v2FindItem_(ss,body.itemCode),qty=v2Qty_(body.qty),req=String(body.requestId),staff=v2SafeText_(body.staffId,80),doc=v2SafeText_(body.supplierDoc,120);
+  if(item.itemType==='FINISHED_GOODS'){
+    if(!Number.isInteger(qty))throw Error('Finished goods must be recorded in whole units');
+    if(doc)throw Error('Finished production does not use a supplier invoice number');
+    const day=Utilities.formatDate(new Date(),'Asia/Jakarta','yyyy-MM-dd');
+    const movement=v2AppendMovement_(ss,req,item,'PRODUCTION_FINISHED','IN',qty,'PROD-'+day,staff,'Finished and packed');
+    return {movementId:movement.id,duplicate:movement.duplicate,stockAfter:movement.stock,movementType:'PRODUCTION_FINISHED'};
+  }
+  if(!doc)throw Error('Supplier invoice or sales order reference is required for material receipts');
   const previous=v2Movement_(ss,req);
   if(previous&&(previous[4]!=='GOODS_RECEIPT'||v2Code_(previous[3])!==v2Code_(item.itemCode)||Number(previous[6])!==qty))throw Error('Request ID already used for a different transaction');
   let receipt=v2ReceiptByRequest_(ss,req);
@@ -169,6 +193,9 @@ function v2Receive_(body){return v2Lock_(function(ss){
   const movement=v2AppendMovement_(ss,req,item,'GOODS_RECEIPT','IN',Number(receipt[3]),String(receipt[0]),staff,'');
   return {receiptId:String(receipt[0]),movementId:movement.id,duplicate:movement.duplicate,stockAfter:movement.stock};
 })}
+// Retain this internal name for older regression fixtures. The stock-in
+// handler decides the movement type from Item Master, never from staff input.
+function v2Receive_(body){return v2StockIn_(body)}
 
 function v2ReversedQty_(ss,receiptId){return v2Rows_(v2Sheet_(ss,'Receipt Reversals'),8).filter(r=>String(r[2])===String(receiptId)).reduce((n,r)=>n+Number(r[4]||0),0)}
 function v2AllocatedQty_(ss,receiptId){return v2OwnerData_(ss).receipts.find(r=>r.id===String(receiptId))?.allocatedQty||0}
@@ -215,6 +242,22 @@ function v2EnsureReversals_(ss,allocation,item,body){
 }
 function v2StockOut_(body){return v2Lock_(function(ss){
   const item=v2FindItem_(ss,body.itemCode),qty=v2Qty_(body.qty),req=String(body.requestId),staff=v2SafeText_(body.staffId,80);
+  if(item.itemType==='FINISHED_GOODS'){
+    if(!Number.isInteger(qty))throw Error('Finished goods correction must use whole units');
+    if(v2Ref_(body.supplierDoc))throw Error('Finished production correction does not use supplier documents');
+    const prior=v2Movement_(ss,req);
+    if(prior){
+      if(prior[4]!=='PRODUCTION_CORRECTION_OUT'||v2Code_(prior[3])!==v2Code_(item.itemCode)||Number(prior[6])!==qty){
+        throw Error('Request ID already used for another action');
+      }
+      return {movementId:String(prior[0]),duplicate:true,stockAfter:v2Stock_(ss,item)};
+    }
+    const available=v2ItemStats_(ss,item).todayFinished;
+    if(qty>available)throw Error('Production correction exceeds finished goods recorded today');
+    const date=Utilities.formatDate(new Date(),'Asia/Jakarta','yyyy-MM-dd');
+    const change=v2AppendMovement_(ss,req,item,'PRODUCTION_CORRECTION_OUT','OUT',qty,'PROD-'+date,staff,'Same-day production entry correction');
+    return {movementId:change.id,duplicate:change.duplicate,stockAfter:change.stock,movementType:'PRODUCTION_CORRECTION_OUT'};
+  }
   if(v2Ref_(body.supplierDoc))return v2OutReceipt_(ss,body,item,qty);
   const existing=v2Movement_(ss,req);
   if(existing){
