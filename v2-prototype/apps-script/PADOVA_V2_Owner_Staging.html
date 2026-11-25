@@ -75,7 +75,7 @@
         </details>
         <div class="actions"><button id="save" class="primary">SAVE PURCHASE</button><button id="new">NEW PURCHASE / CANCEL EDIT</button></div>
         <div id="status" class="status hidden" role="status"></div>
-        <div id="pending" class="retry hidden"><strong>Save confirmation uncertain</strong><p>Retry using the same transaction ID to prevent duplicate purchases.</p><button id="retry">RETRY SAVE</button><button id="cancelPending">CLEAR PENDING SAVE</button></div>
+        <div id="pending" class="retry hidden"><strong id="pendingTitle">Saving purchase…</strong><p id="pendingHint">Please wait. The transaction ID protects against duplicate entries.</p><button id="retry">RETRY SAVE</button><button id="cancelPending">CLEAR PENDING SAVE</button></div>
       </section>
       <section>
         <div class="card"><h2>Unmatched Goods Receipts</h2><p class="muted">Available quantities are net of corrections and allocations to purchases.</p><div id="unmatched"></div></div>
@@ -106,6 +106,8 @@
       $('save').disabled=disabled||!state.items.length;
       $('new').disabled=disabled;
       $('retry').disabled=busy;$('cancelPending').disabled=busy;
+      $('pendingTitle').textContent=busy?'Saving purchase…':'Save confirmation uncertain';
+      $('pendingHint').textContent=busy?'Please wait. The transaction ID protects against duplicate entries.':'Retry using the same transaction ID to prevent duplicate purchases.';
       $('pending').classList.toggle('hidden',!pending);
     }
     function reset(){
@@ -123,7 +125,8 @@
       $('supplierQty').value=p.supplierQty===p.stockQty&&p.supplierUnit===p.stockUnit?'':p.supplierQty;
       $('supplierUnit').value=p.supplierUnit===p.stockUnit?'':p.supplierUnit;
       $('invoiceDate').value=/^\d{4}-\d{2}-\d{2}$/.test(p.invoiceDate)?p.invoiceDate:'';
-      $('amountOverride').value='';$('notes').value=p.notes||'';
+      $('amountOverride').value=p.invoiceAmount!==''&&Number(p.invoiceAmount)!==Number(p.supplierQty)*Number(p.unitCost)?p.invoiceAmount:'';
+      $('notes').value=p.notes||'';
       $('details').open=!!($('supplierQty').value||$('supplierUnit').value||$('notes').value);
       $('heading').textContent='Edit Purchase';$('editNotice').classList.remove('hidden');$('save').textContent='SAVE CHANGES';
       render();$('heading').scrollIntoView({behavior:'smooth',block:'start'});
@@ -187,7 +190,7 @@
       }catch(e){notify(`Save result uncertain: ${e.message||String(e)}. Check purchasing history or use RETRY SAVE with the same request ID.`,'warn')}
       finally{busy=false;render();}
     }
-    $('save').onclick=()=>{try{if(pending)throw Error('Resolve the previous pending save first');pending=payload();sessionStorage.setItem(KEY,JSON.stringify(pending));render();send()}catch(e){notify(e.message||String(e),'bad')}};
+    $('save').onclick=()=>{try{if(pending)throw Error('Resolve the previous pending save first');pending=payload();sessionStorage.setItem(KEY,JSON.stringify(pending));send()}catch(e){notify(e.message||String(e),'bad')}};
     $('retry').onclick=send;
     $('cancelPending').onclick=()=>{if(!pending)return;if(!confirm('Clear this pending save? Check Purchasing History first so you do not enter the same invoice twice.'))return;pending=null;sessionStorage.removeItem(KEY);render();notify('Pending request cleared. Review purchasing history before saving again.','warn')};
     $('new').onclick=()=>{if(!pending){reset();notify('Ready for a new purchase.')}};
