@@ -44,6 +44,12 @@ export function selectedReceiptQuantity(state,receiptIds,editingPurchaseId=null)
     return total+unmatchedQty(state,id)+previouslyAllocated;
   },0);
 }
+export function commonSupplierReference(state,receiptIds){
+  const selected=[...new Set(receiptIds)].map(id=>state.receipts.find(r=>r.id===id));
+  if(!selected.length||selected.some(r=>!r?.supplierDoc?.trim()))return null;
+  const normalized=[...new Set(selected.map(r=>r.supplierDoc.trim().toUpperCase()))];
+  return normalized.length===1?selected[0].supplierDoc.trim():null;
+}
 export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[]}){
   if(!invoice||!supplier||!state.items.some(x=>x.code===itemCode)||!validQty(invoiceQty)||!Number.isFinite(Number(unitCost))||Number(unitCost)<0)throw Error('Complete supplier, invoice, item, quantity and cost');
   const existing=id?state.purchases.find(p=>p.id===id):null;
