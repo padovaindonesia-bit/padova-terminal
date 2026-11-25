@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>PADOVA V2 — Dispatch Staging</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,sans-serif;color:#1a3445;background:#eff4f6}
+    *{box-sizing:border-box}body{margin:0}header{background:#123e50;color:white;padding:22px 16px}
+    header .inner,main{max-width:830px;margin:auto}h1{font-size:23px;margin:8px 0 2px}h2{font-size:17px;margin:0 0 14px}
+    header p{margin:0;color:#d3e4e8;font-size:13px}.chip{display:inline-block;padding:5px 8px;border-radius:6px;background:#cbe5eb;color:#164357;font-size:11px;font-weight:800;letter-spacing:.04em}
+    main{padding:16px;display:grid;gap:14px}.card{background:white;border:1px solid #d9e3e8;padding:18px;border-radius:12px;box-shadow:0 2px 8px #123e5010}
+    label{font-weight:650;display:block;font-size:13px;margin:15px 0 6px}input,select{display:block;width:100%;border:1px solid #b6cbd2;border-radius:8px;background:white;color:#163948;font:inherit;font-size:16px;padding:12px;min-height:46px}
+    input:focus,select:focus{outline:2px solid #6bb2c4;outline-offset:1px}button{font:inherit;border:1px solid #a9c0cb;background:#f2f8fa;color:#184357;border-radius:8px;padding:11px 14px;font-weight:700;cursor:pointer;min-height:46px}
+    button.primary{background:#17667e;color:#fff;border-color:#17667e}button.warn{background:#9c432d;color:white;border-color:#9c432d}button:disabled{opacity:.48;cursor:not-allowed}
+    .row{display:flex;gap:8px}.row input{flex:1;min-width:0}.muted{color:#607987;font-size:13px;line-height:1.5}.summary{background:#f1f8fa;border:1px solid #d4e9ec;border-radius:9px;padding:12px;margin-top:12px;font-size:13px;line-height:1.6}
+    .qtytools{display:flex;gap:7px;margin-top:7px}.qtytools button{flex:1;padding:8px;min-height:38px}.actions{margin-top:18px}.actions button{width:100%}
+    .status{white-space:pre-line;border-radius:9px;padding:12px;margin-top:12px;background:#e4f3e9;color:#175c3d;font-size:13px;display:none}
+    .status.bad{background:#fce7e6;color:#8c1f18}.status.caution{background:#fff3d6;color:#7b5110}
+    .pending{display:none;background:#fff5da;border:1px solid #e8d49a;padding:12px;border-radius:9px;margin-top:12px}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}td,th{border-bottom:1px solid #e5edf0;padding:8px 5px;text-align:left}th{color:#4d6875;font-weight:700}.scroll{overflow-x:auto}
+    .toggle{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px}.toggle input{width:20px;height:20px;min-height:0;margin:0}
+    .hint{font-size:12px;color:#657b86;margin:5px 0 0}a{color:#17667e} [hidden]{display:none!important}
+    @media(max-width:420px){main{padding:10px}.card{padding:14px}h1{font-size:20px}.row>button{white-space:nowrap}}
+  </style>
+</head>
+<body>
+<input id="ownerMode" type="hidden" value="<?= ownerMode ?>">
+<header><div class="inner"><span class="chip">TEST ONLY — BUKAN LIVE</span><h1>PADOVA V2 · Pengiriman</h1><p>Surat Jalan manual · stok berkurang saat barang keluar fisik</p></div></header>
+<main>
+  <section class="card" id="authCard">
+    <h2>Perangkat uji</h2>
+    <p class="muted">Kunci pengujian disimpan hanya selama halaman ini terbuka. Ini bukan prosedur untuk Terminal live.</p>
+    <label for="deviceToken">Token uji</label>
+    <div class="row"><input id="deviceToken" type="password" autocomplete="off" placeholder="Masukkan token uji"><button id="activate" type="button">Aktifkan</button></div>
+    <p class="hint" id="deviceState">Belum aktif</p>
+  </section>
+  <section class="card">
+    <h2>Konfirmasi barang keluar</h2>
+    <label for="staffId">Nama / kode petugas</label>
+    <input id="staffId" autocomplete="off" placeholder="Nama staf">
+    <label for="soNo">Nomor Sales Order</label>
+    <div class="row"><input id="soNo" autocomplete="off" placeholder="Contoh: SO-V2-001"><button id="findSO" type="button">Cari SO</button></div>
+    <div id="soSummary" class="summary" hidden aria-live="polite"></div>
+    <label for="itemCode">Barang</label>
+    <select id="itemCode" disabled><option value="">Cari SO terlebih dahulu</option></select>
+    <div id="itemSummary" class="summary" hidden aria-live="polite"></div>
+    <label for="sjNo">Nomor Surat Jalan (fisik)</label>
+    <input id="sjNo" autocomplete="off" placeholder="Nomor sesuai Surat Jalan cetak">
+    <label for="qty">Jumlah keluar</label>
+    <input id="qty" type="number" inputmode="numeric" step="1" min="1" placeholder="Jumlah satuan utuh">
+    <div class="qtytools"><button type="button" data-step="-1">−1</button><button type="button" data-step="1">+1</button><button type="button" data-step="5">+5</button><button type="button" id="clearQty">Hapus</button></div>
+    <label for="evidence">Bukti foto/PDF di Google Drive <span class="muted">(opsional)</span></label>
+    <input id="evidence" type="url" inputmode="url" autocomplete="off" placeholder="https://drive.google.com/…">
+    <p class="hint">Surat Jalan tetap ditulis/dicetak seperti biasa. Aplikasi hanya mencatat nomor dan bukti pendukung; tidak membuat Surat Jalan.</p>
+    <label class="toggle" id="overrideGroup"><input id="override" type="checkbox">Override reservasi SO lain (khusus owner)</label>
+    <div class="actions"><button class="primary" id="confirmDispatch" type="button">KONFIRMASI BARANG KELUAR</button></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="pending" class="pending"><p id="pendingDetail" class="muted"></p><div class="row"><button class="primary" id="retry" type="button">COBA LAGI</button><button id="discard" type="button">BATALKAN</button></div><p class="hint">Gunakan ID yang sama saat retry agar stok tidak berkurang dua kali.</p></div>
+  </section>
+  <section class="card" id="ownerPanel" hidden>
+    <h2>Owner · stok tersedia & koreksi pengiriman</h2>
+    <button id="refreshOwner" type="button">Refresh data</button>
+    <p class="muted">Available = stok fisik − sisa pesanan dari SO berstatus Confirmed. Angka negatif menandakan kekurangan stok. Tidak ada harga di layar ini.</p>
+    <div class="scroll"><table><thead><tr><th>Barang</th><th>Fisik</th><th>Reservasi</th><th>Available</th></tr></thead><tbody id="availabilityRows"></tbody></table></div>
+    <label for="correctionDispatch">Catatan pengiriman yang perlu dikoreksi</label>
+    <select id="correctionDispatch"><option value="">Pilih Surat Jalan / barang</option></select>
+    <label for="correctionQty">Jumlah yang dikembalikan ke stok</label>
+    <input id="correctionQty" type="number" inputmode="numeric" min="1" step="1" placeholder="Jumlah koreksi">
+    <label for="correctionReason">Alasan koreksi</label>
+    <input id="correctionReason" autocomplete="off" placeholder="Contoh: salah input kuantitas">
+    <div class="actions"><button class="warn" id="correct" type="button">SIMPAN KOREKSI</button></div>
+    <div id="correctionPending" class="pending"><p class="muted">Hasil koreksi belum pasti. Tekan retry dengan ID yang sama—jangan buat koreksi baru.</p><button id="retryCorrection" type="button">COBA LAGI KOREKSI</button></div>
+    <div id="correctionStatus" class="status" aria-live="polite"></div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const OWNER_MODE=$('ownerMode').value==='true',PENDING_KEY='padova-v2-dispatch-pending-v1',CORRECTION_KEY='padova-v2-dispatch-correction-pending-v1';
+  let deviceToken='',so=null,busy=false,pending=null,correctionPending=null,ownerData=null;
+  try{pending=JSON.parse(sessionStorage.getItem(PENDING_KEY)||'null')}catch{pending=null}
+  try{correctionPending=JSON.parse(sessionStorage.getItem(CORRECTION_KEY)||'null')}catch{correctionPending=null}
+  $('authCard').hidden=OWNER_MODE;$('ownerPanel').hidden=!OWNER_MODE;$('overrideGroup').hidden=!OWNER_MODE;
+  function message(id,txt,bad=false,caution=false){const el=$(id);el.textContent=txt;el.className='status'+(bad?' bad':caution?' caution':'');el.style.display='block'}
+  function makeOption(value,txt){const op=document.createElement('option');op.value=value;op.textContent=txt;return op}
+  function clearOptions(el,label){el.replaceChildren(makeOption('',label))}
+  function enabled(){return OWNER_MODE||Boolean(deviceToken)}
+  function blocked(){return busy||Boolean(pending)}
+  function renderLock(){
+    for(const id of ['staffId','soNo','sjNo','qty','evidence','override'])$(id).disabled=blocked();
+    $('findSO').disabled=blocked();$('confirmDispatch').disabled=blocked();$('itemCode').disabled=blocked()||!so;
+    document.querySelectorAll('[data-step]').forEach(b=>b.disabled=blocked());$('clearQty').disabled=blocked();
+    $('retry').disabled=busy||!enabled();$('discard').disabled=busy;
+  }
+  function showPending(){
+    $('pending').style.display=pending?'block':'none';
+    $('pendingDetail').textContent=pending?`${pending.soNo} · ${pending.sjNo} · ${pending.itemCode} · ${pending.qty} ${pending.unit} · ID ${pending.requestId}`:'';
+    renderLock();
+  }
+  function showCorrectionPending(){
+    $('correctionPending').style.display=OWNER_MODE&&correctionPending?'block':'none';
+    $('correct').disabled=busy||Boolean(correctionPending);
+    $('retryCorrection').disabled=busy;
+  }
+  function rpc(body){return new Promise((resolve,reject)=>{
+    if(!window.google?.script?.run){reject(Error('Buka melalui Apps Script staging.'));return}
+    const method=OWNER_MODE?'v2OwnerApi':'v2StaffApi',payload=OWNER_MODE?body:{...body,deviceToken};
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[method](payload);
+  })}
+  function requireDevice(){if(!enabled())throw Error('Aktifkan token uji terlebih dahulu.')}
+  function selected(){return so?.items.find(x=>x.itemCode===$('itemCode').value)}
+  function renderItem(){
+    const x=selected();$('itemSummary').hidden=!x;
+    if(x)$('itemSummary').textContent=`Pesanan: ${x.ordered} ${x.unit} · Sudah keluar: ${x.shipped} · Sisa SO: ${x.remaining} · Stok fisik: ${x.onHand} · Bisa keluar tanpa override: ${x.dispatchable}`;
+  }
+  async function findSO(){
+    try{
+      requireDevice();if(pending)throw Error('Selesaikan transaksi tertunda terlebih dahulu.');
+      const number=$('soNo').value.trim();if(!number)throw Error('Masukkan nomor SO.');
+      busy=true;renderLock();const data=await rpc({action:'dispatchLookup',soNo:number});
+      if(!data?.ok)throw Error(data?.message||'Sales Order tidak ditemukan');
+      so=data;$('soSummary').hidden=false;$('soSummary').textContent=`${data.so.no} · ${data.so.customer||'Pelanggan'} · Status: ${data.so.status}`;
+      clearOptions($('itemCode'),'Pilih barang');data.items.forEach(x=>$('itemCode').appendChild(makeOption(x.itemCode,`${x.itemName} · sisa ${x.remaining} ${x.unit}`)));
+      if(data.items.length===1)$('itemCode').value=data.items[0].itemCode;
+      renderItem();message('status',data.so.status==='CONFIRMED'?'SO ditemukan. Isi nomor Surat Jalan dan jumlah yang benar.':'SO belum Confirmed; tidak bisa dispatch.',false,data.so.status!=='CONFIRMED');
+    }catch(e){so=null;$('soSummary').hidden=true;$('itemSummary').hidden=true;clearOptions($('itemCode'),'Cari SO terlebih dahulu');message('status',e.message||String(e),true)}
+    finally{busy=false;renderLock()}
+  }
+  function clearForm(){
+    so=null;for(const id of ['staffId','soNo','sjNo','qty','evidence'])$(id).value='';$('override').checked=false;
+    $('soSummary').hidden=true;$('itemSummary').hidden=true;clearOptions($('itemCode'),'Cari SO terlebih dahulu');renderLock();
+  }
+  async function sendPending(){
+    if(!pending)return;
+    try{
+      requireDevice();busy=true;renderLock();const r=await rpc(pending);
+      if(!r?.ok)throw Error(r?.message||'Gagal menyimpan pengiriman');
+      const msg=`Tersimpan: SJ ${pending.sjNo} · ${pending.qty} ${pending.unit} keluar. Stok fisik kini ${r.stockAfter}; sisa SO ${r.soRemaining}. ${r.duplicate?'ID lama dikenali, stok tidak dihitung dua kali. ':''}Siap untuk transaksi berikutnya.`;
+      pending=null;sessionStorage.removeItem(PENDING_KEY);clearForm();message('status',msg);
+      if(OWNER_MODE)await refreshOwner();
+    }catch(e){message('status',`Belum pasti tersimpan: ${e.message||String(e)}. Tekan COBA LAGI memakai ID transaksi yang sama.`,false,true)}
+    finally{busy=false;showPending()}
+  }
+  function submit(){
+    try{
+      requireDevice();if(pending)throw Error('Selesaikan transaksi tertunda.');
+      const x=selected(),qty=Number($('qty').value),staffId=$('staffId').value.trim(),sjNo=$('sjNo').value.trim(),evidenceUrl=$('evidence').value.trim();
+      if(!so||so.so.no!==$('soNo').value.trim())throw Error('Cari SO terlebih dahulu.');
+      if(so.so.status!=='CONFIRMED')throw Error('SO harus Confirmed sebelum barang keluar.');
+      if(!x)throw Error('Pilih barang dari SO.');
+      if(!staffId||!sjNo)throw Error('Nama petugas dan nomor Surat Jalan wajib diisi.');
+      if(!Number.isInteger(qty)||qty<=0)throw Error('Masukkan jumlah satuan utuh lebih dari nol.');
+      if(qty>x.remaining)throw Error('Jumlah melebihi sisa pesanan.');
+      if(qty>x.onHand)throw Error('Stok fisik tidak mencukupi.');
+      if(qty>x.dispatchable&&!$('override').checked)throw Error('Barang sudah dipesan SO lain; minta owner untuk override.');
+      pending={action:'dispatchConfirm',soNo:so.so.no,itemCode:x.itemCode,unit:x.unit,sjNo,qty,staffId,evidenceUrl,overrideReservation:OWNER_MODE&&$('override').checked,requestId:crypto.randomUUID()};
+      sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending));showPending();sendPending();
+    }catch(e){message('status',e.message||String(e),true)}
+  }
+  async function refreshOwner(){
+    if(!OWNER_MODE)return;
+    const r=await rpc({action:'dispatchSnapshot'});if(!r?.ok)throw Error(r?.message||'Gagal memuat owner data');ownerData=r;
+    const rows=$('availabilityRows');rows.replaceChildren();r.availability.forEach(a=>{
+      const tr=document.createElement('tr');[`${a.itemName} (${a.unit})`,a.onHand,a.reserved,a.available].forEach(v=>{const td=document.createElement('td');td.textContent=String(v);tr.appendChild(td)});rows.appendChild(tr);
+    });
+    const dropdown=$('correctionDispatch');clearOptions(dropdown,'Pilih Surat Jalan / barang');
+    r.dispatches.filter(d=>d.net>0).forEach(d=>dropdown.appendChild(makeOption(d.id,`${d.soNo} · ${d.sjNo} · ${d.itemCode}: ${d.net}/${d.qty} ${d.unit}`)));
+  }
+  async function sendCorrectionPending(){
+    if(!correctionPending)return;
+    try{
+      if(busy)throw Error('Ada proses lain sedang berjalan.');
+      busy=true;renderLock();showCorrectionPending();
+      const r=await rpc(correctionPending);
+      if(!r?.ok)throw Error(r?.message||'Koreksi gagal');
+      const qty=correctionPending.qty;correctionPending=null;sessionStorage.removeItem(CORRECTION_KEY);
+      $('correctionQty').value='';$('correctionReason').value='';message('correctionStatus',`Koreksi tersimpan. ${qty} kembali ke stok. Sisa net pengiriman: ${r.dispatchRemaining}. ${r.duplicate?'ID sebelumnya dikenali; stok tidak dihitung dua kali.':''}`);
+      await refreshOwner();
+    }catch(e){message('correctionStatus',`Hasil koreksi belum pasti: ${e.message||String(e)}. Tekan COBA LAGI KOREKSI dengan ID yang sama.`,false,true)}
+    finally{busy=false;renderLock();showCorrectionPending()}
+  }
+  function correct(){
+    try{
+      if(correctionPending)throw Error('Selesaikan koreksi pending terlebih dahulu.');
+      const id=$('correctionDispatch').value,qty=Number($('correctionQty').value),reason=$('correctionReason').value.trim();
+      if(!id||!Number.isInteger(qty)||qty<=0||!reason)throw Error('Pilih pengiriman, jumlah koreksi, dan alasan.');
+      correctionPending={action:'dispatchCorrect',dispatchId:id,qty,reason,staffId:'OWNER',requestId:crypto.randomUUID()};
+      sessionStorage.setItem(CORRECTION_KEY,JSON.stringify(correctionPending));showCorrectionPending();sendCorrectionPending();
+    }catch(e){message('correctionStatus',e.message||String(e),true)}
+  }
+  $('activate').onclick=()=>{deviceToken=$('deviceToken').value.trim();$('deviceToken').value='';$('deviceState').textContent=deviceToken?'Token aktif untuk halaman ini.':'Belum aktif';message('status',deviceToken?'Perangkat uji siap.':'Masukkan token uji.',!deviceToken);renderLock()};
+  $('findSO').onclick=findSO;$('soNo').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findSO()}});
+  $('itemCode').onchange=renderItem;$('confirmDispatch').onclick=submit;
+  $('qty').addEventListener('focus',e=>e.target.select());
+  document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{const qty=Math.max(0,(Number($('qty').value)||0)+Number(b.dataset.step));$('qty').value=qty||'';$('qty').focus()});
+  $('clearQty').onclick=()=>{$('qty').value='';$('qty').focus()};
+  $('retry').onclick=sendPending;$('discard').onclick=()=>{if(!pending)return;if(!confirm('Batalkan pending? Pastikan dulu apakah pengiriman sudah dicatat.'))return;pending=null;sessionStorage.removeItem(PENDING_KEY);clearForm();showPending();message('status','Pending dibatalkan. Periksa Dispatches sebelum memasukkan ulang.',false,true)};
+  $('refreshOwner').onclick=()=>refreshOwner().catch(e=>message('correctionStatus',e.message||String(e),true));$('correct').onclick=correct;$('retryCorrection').onclick=sendCorrectionPending;
+  if(OWNER_MODE)refreshOwner().catch(e=>message('correctionStatus',e.message||String(e),true));
+  if(pending)message('status','Ada pengiriman pending. Aktifkan perangkat dan tekan COBA LAGI.',false,true);
+  if(OWNER_MODE&&correctionPending)message('correctionStatus','Ada koreksi pending. Tekan COBA LAGI KOREKSI dengan ID yang sama.',false,true);
+  showPending();showCorrectionPending();
+})();
+</script>
+</body>
+</html>
