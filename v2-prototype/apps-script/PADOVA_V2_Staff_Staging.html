@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PADOVA V2 — Staff Staging</title>
+  <style>
+    :root { font-family:system-ui,-apple-system,sans-serif; color:#1c3a49; background:#eff4f6 }
+    * { box-sizing:border-box }
+    body { margin:0; padding-bottom:24px }
+    header { background:#183a50; color:white; padding:20px 16px }
+    header .inner,main { max-width:640px; margin:auto }
+    header h1 { font-size:22px; margin:0 0 4px }
+    header p { opacity:.86; margin:0; font-size:13px }
+    main { padding:16px }
+    .card { background:#fff; border:1px solid #dbe6eb; border-radius:14px; padding:17px; margin-bottom:14px; box-shadow:0 2px 8px #183a5010 }
+    .card h2 { font-size:17px; margin:0 0 12px }
+    label { display:block; margin:15px 0 6px; font-size:13px; font-weight:700 }
+    input { display:block; width:100%; min-width:0; border:1px solid #b9cbd3; border-radius:10px; padding:12px; min-height:48px; font:inherit; color:#173446; background:white }
+    input:focus { outline:3px solid #9cdae0; border-color:#137b87 }
+    button { border:1px solid #a8c0cb; border-radius:10px; background:white; color:#153a4b; padding:12px; min-height:46px; font:inherit; font-weight:750; cursor:pointer }
+    button:disabled { opacity:.48; cursor:default }
+    button.primary { color:white; background:#176958; border-color:#176958 }
+    button.out { color:#833721; background:#fff4ef; border-color:#dcb9aa }
+    button.ghost { background:#eef5f7 }
+    .row { display:flex; gap:9px; align-items:center }
+    .row>* { flex:1; min-width:0 }
+    .subtle { font-size:12px; color:#64808b; line-height:1.45; margin:7px 0 }
+    .chip { display:inline-block; color:#fff; background:#a66a17; border-radius:5px; font-size:11px; font-weight:800; letter-spacing:.06em; padding:5px 7px; margin-bottom:9px }
+    .item { display:none; background:#edf7f5; border:1px solid #bcdad4; border-radius:10px; padding:13px; margin-top:13px }
+    .item b { display:block; font-size:18px }
+    .item .stock { font-size:25px; font-weight:850; color:#106653; margin-top:4px }
+    .qtytools { display:flex; gap:7px; margin-top:8px }
+    .qtytools button { flex:1; padding:8px 4px }
+    .actions { margin-top:18px; display:flex; gap:9px }
+    .actions button { flex:1 }
+    .status { display:none; margin-top:14px; padding:13px; border-radius:9px; font-size:14px; background:#ddf4e9; color:#17664a; line-height:1.45; white-space:pre-wrap }
+    .status.bad { background:#fff0ea; color:#853f2a }
+    .status.warn { background:#fff3d7; color:#77500b }
+    .pending { display:none; margin-top:12px; padding:12px; background:#fff6df; border:1px solid #ead6a6; border-radius:9px }
+    .pending p { font-size:13px; line-height:1.45; margin:0 0 10px }
+    [hidden] { display:none!important }
+    @media (max-width:400px) { main { padding:11px } .card { padding:14px } header h1 { font-size:19px } }
+  </style>
+</head>
+<body>
+<header><div class="inner"><span class="chip">TEST ONLY — BUKAN LIVE</span><h1>PADOVA V2 · Stock</h1><p>Staging Terminal · barang masuk dan keluar</p></div></header>
+<main>
+  <section class="card">
+    <h2>Perangkat uji</h2>
+    <p class="subtle">Token hanya disimpan di memori halaman ini. Minta token perangkat uji dari pemilik; jangan kirim melalui chat publik.</p>
+    <label for="deviceToken">Token perangkat uji</label>
+    <div class="row"><input id="deviceToken" type="password" autocomplete="off" placeholder="Masukkan token uji"><button id="applyToken" class="ghost" type="button">Aktifkan</button></div>
+    <p class="subtle" id="deviceState">Belum aktif</p>
+  </section>
+  <section class="card">
+    <h2>Catat pergerakan stok</h2>
+    <label for="staffId">Nama / kode staf</label>
+    <input id="staffId" autocomplete="off" placeholder="Nama staf">
+    <label for="itemCode">Kode barang / hasil scan QR</label>
+    <div class="row"><input id="itemCode" autocapitalize="characters" autocomplete="off" placeholder="Contoh: TEST-DACRON"><button id="lookup" class="ghost" type="button">Cari</button></div>
+    <p class="subtle">Untuk uji awal, ketik kode barang lalu tekan Cari. Kamera QR akan disambungkan setelah pengujian ini.</p>
+    <div id="itemCard" class="item" aria-live="polite"><b id="itemName"></b><span id="itemCodeLabel"></span><div class="stock"><span id="itemStock"></span> <small id="itemUnit"></small></div><span class="subtle">Stok saat ini di sandbox</span></div>
+    <label for="qty">Jumlah</label>
+    <input id="qty" type="number" inputmode="decimal" min="0.001" step="any" placeholder="Masukkan jumlah">
+    <div class="qtytools"><button type="button" data-step="-1">−1</button><button type="button" data-step="1">+1</button><button type="button" data-step="5">+5</button><button type="button" id="clearQty">Hapus</button></div>
+    <label for="supplierDoc">No. invoice / SO supplier (opsional)</label>
+    <input id="supplierDoc" autocomplete="off" placeholder="Sesuai dokumen supplier">
+    <p class="subtle"><b>MASUK:</b> mencatat barang diterima. <b>KELUAR:</b> dengan nomor dokumen yang sama membalikkan penerimaan yang belum dicocokkan; tanpa nomor dokumen mencatat bahan diambil.</p>
+    <div class="actions"><button class="primary" id="stockIn" type="button">MASUK</button><button class="out" id="stockOut" type="button">KELUAR</button></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="pending" class="pending"><p id="pendingDetail"></p><div class="row"><button id="retry" class="primary" type="button">COBA LAGI</button><button id="discard" type="button">BATALKAN</button></div><p class="subtle">Coba lagi menggunakan ID transaksi yang sama, jadi stok tidak terhitung dua kali. Batalkan hanya setelah memastikan catatan di sandbox.</p></div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const PENDING_KEY = 'padova-v2-staff-staging-pending-v1';
+  let deviceToken = '', currentItem = null, busy = false, pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(PENDING_KEY)||'null'); } catch { pending = null; }
+  function status(message, kind='ok') { const e=$('status'); e.textContent=message; e.className='status'+(kind==='error'?' bad':kind==='warn'?' warn':''); e.style.display='block'; }
+  function renderPending() {
+    $('pending').style.display=pending?'block':'none';
+    $('pendingDetail').textContent=pending?`${pending.action==='stockIn'?'MASUK':'KELUAR'} ${pending.qty} × ${pending.itemCode} · ${pending.supplierDoc||'tanpa nomor dokumen'} · ID ${pending.requestId}`:'';
+    renderDisabled();
+  }
+  function renderDisabled() {
+    const locked=busy||Boolean(pending);
+    $('lookup').disabled=locked; $('stockIn').disabled=locked; $('stockOut').disabled=locked;
+    $('retry').disabled=busy||!deviceToken; $('discard').disabled=busy;
+    for(const id of ['staffId','itemCode','qty','supplierDoc'])$(id).disabled=locked;
+    document.querySelectorAll('[data-step]').forEach(b=>b.disabled=locked);
+    $('clearQty').disabled=locked;
+  }
+  function runServer(payload) {
+    return new Promise((resolve,reject) => {
+      if(!window.google?.script?.run){ reject(Error('Buka halaman ini melalui Apps Script test deployment.')); return; }
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).v2StaffApi(payload);
+    });
+  }
+  function ensureDevice(){ if(!deviceToken)throw Error('Aktifkan token perangkat uji terlebih dahulu.'); }
+  async function lookup() {
+    try {
+      ensureDevice(); if(pending)throw Error('Selesaikan transaksi tertunda terlebih dahulu.');
+      const code=$('itemCode').value.trim(); if(!code)throw Error('Masukkan kode barang.');
+      busy=true;renderDisabled();
+      const result=await runServer({action:'itemLookup',itemCode:code,deviceToken});
+      if(!result?.ok)throw Error(result?.message||'Barang tidak ditemukan.');
+      currentItem={code:result.itemCode,name:result.itemName,unit:result.unit};
+      $('itemName').textContent=result.itemName; $('itemCodeLabel').textContent=result.itemCode;
+      $('itemStock').textContent=result.stockAfter; $('itemUnit').textContent=result.unit;
+      $('itemCard').style.display='block';
+      status('Barang ditemukan. Masukkan jumlah dan pilih MASUK atau KELUAR.');
+      $('qty').focus();
+    } catch(err) { currentItem=null;$('itemCard').style.display='none';status(err.message||String(err),'error'); }
+    finally { busy=false;renderDisabled(); }
+  }
+  function resetEntry() {
+    currentItem=null;$('itemCard').style.display='none';
+    for(const id of ['staffId','itemCode','qty','supplierDoc'])$(id).value='';
+  }
+  async function sendPending() {
+    if(!pending)return;
+    try {
+      ensureDevice();busy=true;renderDisabled();
+      const response=await runServer({...pending,deviceToken});
+      if(!response?.ok)throw Error(response?.message||'Gagal mencatat stok.');
+      const message=`Tersimpan: ${pending.action==='stockIn'?'MASUK':'KELUAR'} ${pending.qty} ${currentItem?.unit||''}. Stok sekarang ${response.stockAfter}. ${response.duplicate?'Permintaan lama dikenali; stok tidak ditambah dua kali.':''}\nSiap untuk transaksi berikutnya.`;
+      pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();status(message);
+    } catch(err) { status(`Belum dapat memastikan hasil transaksi: ${err.message||String(err)}. Gunakan COBA LAGI dengan ID transaksi yang sama.`, 'warn'); }
+    finally { busy=false;renderPending(); }
+  }
+  function submit(action) {
+    try {
+      ensureDevice();if(pending)throw Error('Selesaikan transaksi tertunda terlebih dahulu.');
+      if(!currentItem||$('itemCode').value.trim().toUpperCase()!==currentItem.code.toUpperCase())throw Error('Cari dan konfirmasi barang terlebih dahulu.');
+      const qty=Number($('qty').value),staffId=$('staffId').value.trim(),supplierDoc=$('supplierDoc').value.trim();
+      if(!Number.isFinite(qty)||qty<=0)throw Error('Jumlah harus lebih besar dari nol.');
+      if(!staffId)throw Error('Nama atau kode staf wajib diisi.');
+      pending={action,itemCode:currentItem.code,qty,staffId,supplierDoc,requestId:crypto.randomUUID()};
+      sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending));renderPending();sendPending();
+    } catch(err) { status(err.message||String(err),'error'); }
+  }
+  $('applyToken').onclick=()=>{ deviceToken=$('deviceToken').value.trim();$('deviceToken').value='';$('deviceState').textContent=deviceToken?'Token tersedia untuk sesi ini.':'Belum aktif';status(deviceToken?'Perangkat uji siap.':'Token tidak boleh kosong.',deviceToken?'ok':'error');renderDisabled();};
+  $('lookup').onclick=lookup;
+  $('itemCode').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookup();}});
+  $('qty').addEventListener('focus',event=>event.target.select());
+  document.querySelectorAll('[data-step]').forEach(button=>button.onclick=()=>{const value=Math.max(0,(Number($('qty').value)||0)+Number(button.dataset.step));$('qty').value=value||'';$('qty').focus();});
+  $('clearQty').onclick=()=>{$('qty').value='';$('qty').focus();};
+  $('stockIn').onclick=()=>submit('stockIn');$('stockOut').onclick=()=>submit('stockOut');
+  $('retry').onclick=sendPending;
+  $('discard').onclick=()=>{if(!pending)return;if(!confirm('Batalkan permintaan yang tertunda? Pastikan dulu apakah pergerakan sudah tercatat di sandbox.'))return;pending=null;sessionStorage.removeItem(PENDING_KEY);resetEntry();renderPending();status('Permintaan tertunda dibatalkan. Periksa histori stok bila hasil sebelumnya tidak pasti.','warn');};
+  if(pending)status('Ada transaksi tertunda dari sesi ini. Aktifkan token dan pilih COBA LAGI.','warn');
+  renderPending();
+})();
+</script>
+</body>
+</html>
