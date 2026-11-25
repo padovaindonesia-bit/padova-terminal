@@ -1,0 +1,62 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+
+const html=fs.readFileSync(new URL('./PADOVA_V2_Staff_Staging.html',import.meta.url),'utf8');
+assert.doesNotMatch(html,/Unit Cost|Harga Beli|Harga Jual|Owner Purchasing|<input[^>]*id="unitCost"/i,'Staff HTML must contain no prices');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+assert.ok(script,'Staff page must contain its client controller');
+new vm.Script(script,{filename:'PADOVA_V2_Staff_Staging.html'});
+
+class El {
+  constructor(id){this.id=id;this.value='';this.textContent='';this.className='';this.style={};this.dataset={};this.disabled=false;this.listeners={};}
+  addEventListener(type,fn){this.listeners[type]=fn;}
+  focus(){}
+  select(){}
+  click(){this.onclick?.();}
+}
+const ids=['deviceToken','applyToken','deviceState','staffId','itemCode','lookup','itemCard','itemName','itemCodeLabel','itemStock','itemUnit','qty','supplierDoc','stockIn','stockOut','status','pending','pendingDetail','retry','discard','clearQty'];
+const elements=Object.fromEntries(ids.map(id=>[id,new El(id)]));
+const steppers=[-1,1,5].map(step=>{const e=new El('step'+step);e.dataset.step=String(step);return e});
+const pendingStore=new Map();const calls=[];const seen=new Set();let stock=23,failFirstWrite=true;
+const scriptRun={
+  withSuccessHandler(success){return {...this,success}},
+  withFailureHandler(failure){return {...this,failure}},
+  v2StaffApi(payload){
+    calls.push(payload);
+    queueMicrotask(()=>{
+      if(payload.action==='itemLookup')return this.success(payload.deviceToken==='test-token'?{ok:true,itemCode:'TEST-DACRON',itemName:'Dacron — DEMO',unit:'ball',stockAfter:stock}:{ok:false,message:'Device not authorized'});
+      const duplicate=seen.has(payload.requestId);
+      if(!duplicate){stock+=payload.action==='stockIn'?Number(payload.qty):-Number(payload.qty);seen.add(payload.requestId)}
+      if(failFirstWrite){failFirstWrite=false;return this.failure(Error('Network reply lost'))}
+      this.success({ok:true,duplicate,stockAfter:stock});
+    });
+  }
+};
+const storage={getItem:key=>pendingStore.get(key)||null,setItem:(key,val)=>pendingStore.set(key,val),removeItem:key=>pendingStore.delete(key)};
+const document={getElementById:id=>elements[id],querySelectorAll:selector=>selector==='[data-step]'?steppers:[]};
+vm.runInNewContext(script,{document,window:{google:{script:{run:scriptRun}}},google:{script:{run:scriptRun}},sessionStorage:storage,crypto,confirm:()=>true,queueMicrotask,Error,Promise,Number,Math,JSON,String,console});
+const settle=async()=>{for(let i=0;i<5;i++)await Promise.resolve()};
+elements.itemCode.value='TEST-DACRON';
+elements.lookup.click();await settle();
+assert.match(elements.status.textContent,/Aktifkan token/);
+elements.deviceToken.value='test-token';elements.applyToken.click();
+elements.lookup.click();await settle();
+assert.equal(elements.itemName.textContent,'Dacron — DEMO');
+elements.staffId.value='STAFF 1';elements.qty.value='4';elements.supplierDoc.value='TEST-INVOICE';
+elements.stockIn.click();await settle();
+assert.match(elements.status.textContent,/Network reply lost/);
+assert.equal(elements.pending.style.display,'block');
+const requestId=calls.at(-1).requestId;
+elements.retry.click();await settle();
+assert.equal(calls.at(-1).requestId,requestId,'Retry must use identical request ID');
+assert.equal(seen.size,1,'A lost response must not add stock twice');
+assert.equal(stock,27);
+assert.equal(elements.qty.value,'');
+assert.equal(elements.itemCode.value,'');
+assert.equal(elements.supplierDoc.value,'');
+assert.equal(elements.staffId.value,'');
+assert.equal(elements.pending.style.display,'none');
+assert.equal(storage.getItem('padova-v2-staff-staging-pending-v1'),null);
+console.log('PASS: staff UI uses device auth, retries same request ID, hides prices, and clears forms');
