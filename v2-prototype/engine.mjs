@@ -50,11 +50,23 @@ export function commonSupplierReference(state,receiptIds){
   const normalized=[...new Set(selected.map(r=>r.supplierDoc.trim().toUpperCase()))];
   return normalized.length===1?selected[0].supplierDoc.trim():null;
 }
-export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[]}){
+export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty,unitCost,receiptAllocations=[],autoMatch=false}){
   if(!invoice||!supplier||!state.items.some(x=>x.code===itemCode)||!validQty(invoiceQty)||!Number.isFinite(Number(unitCost))||Number(unitCost)<0)throw Error('Complete supplier, invoice, item, quantity and cost');
   const existing=id?state.purchases.find(p=>p.id===id):null;
   if(id&&!existing)throw Error('Purchase not found');
   if(state.purchases.some(p=>p.id!==id&&p.invoice===invoice&&p.supplier===supplier&&p.itemCode===itemCode))throw Error('Purchase already exists. Edit that record instead.');
+  // Reconcile the *saved* supplier reference, not only checkbox state in the browser.
+  // Existing allocations from this purchase are temporarily available for re-matching.
+  if(autoMatch){
+    let remaining=Number(invoiceQty);
+    const key=String(invoice).trim().toUpperCase();
+    receiptAllocations=state.receipts.filter(r=>r.itemCode===itemCode&&String(r.supplierDoc??'').trim().toUpperCase()===key).map(r=>{
+      const previous=existing?.receiptAllocations?.find(a=>a.receiptId===r.id)?.qty??0;
+      const qty=Math.max(0,Math.min(remaining,unmatchedQty(state,r.id)+previous));
+      remaining-=qty;
+      return {receiptId:r.id,qty};
+    }).filter(a=>a.qty>0);
+  }
   const seen=new Set();let totalAllocated=0;
   for(const a of receiptAllocations){
     if(seen.has(a.receiptId))throw Error('Receipt selected twice');seen.add(a.receiptId);
@@ -64,7 +76,13 @@ export function savePurchase(state,{id=null,invoice,supplier,itemCode,invoiceQty
     totalAllocated+=Number(a.qty);
   }
   if(totalAllocated>Number(invoiceQty))throw Error('Allocated quantity exceeds invoice quantity');
-  const purchase={id:id??`PUR-${crypto.randomUUID()}`,invoice,supplier,itemCode,invoiceQty:Number(invoiceQty),unitCost:Number(unitCost),receiptAllocations:receiptAllocations.map(a=>({receiptId:a.receiptId,qty:Number(a.qty)})),status:totalAllocated===Number(invoiceQty)?'MATCHED':totalAllocated===0?'PENDING MATCHING':'PARTIALLY MATCHED',time:existing?.time??new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const sourceQty=receiptAllocations.reduce((n,a)=>{
+    const r=state.receipts.find(x=>x.id===a.receiptId);
+    const otherPurchasesUsed=state.purchases.filter(p=>p.id!==id).reduce((k,p)=>k+(p.receiptAllocations??[]).filter(v=>v.receiptId===a.receiptId).reduce((j,v)=>j+v.qty,0),0);
+    return n+(r?.qty??0)-otherPurchasesUsed;
+  },0);
+  const status=totalAllocated===0?'PENDING MATCHING':totalAllocated===Number(invoiceQty)&&sourceQty===Number(invoiceQty)?'MATCHED':'PARTIALLY MATCHED';
+  const purchase={id:id??`PUR-${crypto.randomUUID()}`,invoice,supplier,itemCode,invoiceQty:Number(invoiceQty),unitCost:Number(unitCost),receiptAllocations:receiptAllocations.map(a=>({receiptId:a.receiptId,qty:Number(a.qty)})),status,time:existing?.time??new Date().toISOString(),updatedAt:new Date().toISOString()};
   if(existing)Object.assign(existing,purchase);else state.purchases.push(purchase); // No stock movement, ever.
   return purchase;
 }
