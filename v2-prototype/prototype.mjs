@@ -1,4 +1,4 @@
-import {initialState,balance,receiveGoods,savePurchase,unmatchedQty,postMovement,selectedReceiptQuantity} from './engine.mjs';
+import {initialState,balance,receiveGoods,savePurchase,unmatchedQty,postMovement,selectedReceiptQuantity,commonSupplierReference} from './engine.mjs';
 const KEY='padova-v2-demo-v1';const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state;try{const x=JSON.parse(localStorage.getItem(KEY));state=x?.items&&x?.receipts&&x?.purchases&&x?.movements?x:initialState()}catch{state=initialState()}
@@ -21,6 +21,13 @@ function refreshQuantityRelation(){
 function syncQuantityFromCheckedReceipts(){
  const ids=checkedReceiptIds();
  $('invoiceQty').value=ids.length?selectedReceiptQuantity(state,ids,editingId):'';
+ const ref=commonSupplierReference(state,ids);
+ if(ref){
+  $('invoice').value=ref;
+  $('matchHint').textContent=`Supplier reference ${ref} is linked to the selected goods receipt(s).`;
+ }else if(ids.length){
+  $('matchHint').textContent='Selected receipts have different or missing supplier references. Verify the invoice number manually before saving.';
+ }
  refreshQuantityRelation();
 }
 function draw(){
