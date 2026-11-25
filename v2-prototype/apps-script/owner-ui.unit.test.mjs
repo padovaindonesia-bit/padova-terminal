@@ -20,7 +20,7 @@ class Element {
   click(){if(!this.disabled)this.onclick?.()}
 }
 const ids=['heading','editNotice','supplier','invoice','item','stockQty','unit','unitCost','matchHint','receiptOptions','quantityNotice',
-  'showAll','details','supplierQty','supplierUnit','invoiceDate','amountOverride','notes','save','new','status','pending','retry','cancelPending','unmatched','history'];
+  'showAll','details','supplierQty','supplierUnit','invoiceDate','amountOverride','notes','save','new','status','pending','pendingTitle','pendingHint','retry','cancelPending','unmatched','history'];
 const elements=Object.fromEntries(ids.map(id=>[id,new Element(id)]));
 const cache=new Map();
 const dynamic=selector=>{
@@ -75,6 +75,7 @@ elements.stockQty.value='15';elements.stockQty.oninput();
 assert.match(elements.quantityNotice.textContent,/Difference: 5/);
 elements.save.click();await settle();
 assert.match(elements.status.textContent,/Network reply lost/);
+assert.equal(elements.pendingTitle.textContent,'Save confirmation uncertain','Warning appears only after an uncertain response');
 const req=calls[0].requestId;
 elements.retry.click();await settle();
 assert.equal(calls[1].requestId,req,'Ambiguous-save retry must reuse request ID');
@@ -94,4 +95,8 @@ assert.equal(calls.at(-1).purchaseId,'PUR-NEW-1');
 assert.equal(calls.at(-1).invoice,'INV-1111');
 assert.equal(calls.at(-1).manualOverride,false,'Changing invoice manually should restore auto-match');
 assert.equal(current.items[0].stock,23,'Owner purchasing must not change stock');
+current.purchases[0].invoiceAmount=90000;current.purchases[0].supplierQty=30;current.purchases[0].supplierUnit='kg';
+current.purchases[0].unitCost=2000;
+dynamic('[data-edit]')[0].click();
+assert.equal(elements.amountOverride.value,90000,'Editing a purchase must preserve an explicit invoice amount override');
 console.log('PASS: owner UI invoice + receipt + quantity synchronization, edit reconciliation, retry, reset, and no stock change');
