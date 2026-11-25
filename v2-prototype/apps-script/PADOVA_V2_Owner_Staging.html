@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PADOVA V2 — Owner Purchasing Staging</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1b3947;background:#f0f5f6}
+    *{box-sizing:border-box}body{margin:0}header{background:#183b50;color:#fff;padding:18px 22px}
+    .head{max-width:1080px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:14px}
+    h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:0 0 11px}p{line-height:1.45}
+    .sub{color:#c9e0e7;font-size:13px}.tag{color:#624509;background:#ffe39a;font-weight:800;font-size:11px;white-space:nowrap;border-radius:20px;padding:7px 11px}
+    main{max-width:1080px;margin:19px auto;padding:0 14px}.warning{background:#fff5d9;border-left:4px solid #d6a332;border-radius:9px;padding:12px 14px;font-size:13px;margin-bottom:15px}
+    .grid{display:grid;grid-template-columns:1.08fr .92fr;gap:16px;align-items:start}.card{padding:22px;background:#fff;border-radius:15px;box-shadow:0 5px 22px #14394c0c;margin-bottom:15px}
+    label{display:block;font-size:13px;font-weight:750;color:#486372;margin:13px 0 6px}
+    input,select,textarea{width:100%;min-height:42px;border:1px solid #bfd0d6;border-radius:8px;padding:10px;font:inherit;font-size:16px;background:#fff;color:#1b3947}
+    input:focus,select:focus,textarea:focus{outline:2px solid #17755b40;border-color:#17755b}
+    input[type=checkbox]{width:17px;min-height:17px;height:17px;accent-color:#17755b;margin:0;flex:none}
+    button{border:1px solid #bfd0d6;background:#fff;border-radius:9px;padding:11px 13px;min-height:42px;font-size:14px;font-weight:750;color:#284958;cursor:pointer;touch-action:manipulation}
+    button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;cursor:wait}
+    button.primary{background:#17765a;color:white;border-color:#17765a}button.secondary{background:#edf5f4}
+    .row{display:flex;gap:10px;align-items:center}.row>input,.row>select{flex:1;min-width:0}.actions{display:flex;gap:10px;margin-top:16px}.actions button{flex:1}
+    .muted{color:#667f88;font-size:13px}.unit{font-weight:800;color:#336276;background:#edf5f6;border-radius:8px;padding:10px;min-width:58px;text-align:center}
+    .section{margin:19px 0 0;border-top:1px solid #e0ebef;padding-top:13px}
+    .hint{background:#edf6f5;color:#286453;padding:11px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:8px}
+    .hint.warn{background:#fff5dd;color:#765410}.hint.bad{background:#ffe9e8;color:#973b37}
+    .receipt{display:flex;gap:10px;align-items:flex-start;background:#f7fafb;padding:11px;border:1px solid #dce8eb;border-radius:9px;margin-top:8px;cursor:pointer}
+    .receipt strong{display:block;font-size:14px}.receipt small{display:block;color:#6c838c;margin-top:4px}.receipt .right{margin-left:auto;font-size:12px;color:#167156;white-space:nowrap;font-weight:750}
+    .toggle{display:flex;align-items:center;gap:9px;font-size:13px;color:#496572;margin:13px 0 7px;cursor:pointer}
+    details{border:1px solid #dce7eb;border-radius:9px;padding:12px;margin-top:14px}summary{font-weight:800;font-size:13px;cursor:pointer;color:#335768}
+    .detailgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}.detailgrid label{margin-top:11px}
+    .line{padding:12px 0;border-bottom:1px solid #e2ecef;display:flex;align-items:center;gap:10px;justify-content:space-between}
+    .line:last-child{border-bottom:none}.line b{display:block;font-size:14px}.line small{display:block;color:#68808b;margin-top:3px;line-height:1.35}.line button{min-height:35px;padding:7px 10px;font-size:12px}
+    .pill{display:inline-block;margin-top:6px;padding:5px 7px;border-radius:6px;background:#fff0c9;color:#805908;font-size:11px;font-weight:800}
+    .pill.matched{background:#dcf3e8;color:#176748}.pill.partial{background:#fff0ce;color:#885903}
+    .status{margin:13px 0 0;padding:11px 13px;background:#e4f5ed;color:#1c664c;border-radius:8px;white-space:pre-wrap;font-size:13px;line-height:1.45}
+    .status.bad{background:#ffebea;color:#922f29}.status.warn{background:#fff4dc;color:#7a5805}
+    .retry{background:#fff4dc;border-radius:10px;padding:10px;margin-top:10px;font-size:13px}.retry button{margin:5px 5px 0 0;min-height:36px}
+    .hidden{display:none!important}#editNotice{background:#e1f3e9;color:#196448;padding:10px;border-radius:8px;font-size:13px;margin-bottom:10px}
+    @media(max-width:780px){.grid{grid-template-columns:1fr}.card{padding:17px}header{padding:14px}.detailgrid{grid-template-columns:1fr 1fr}}
+    @media(max-width:400px){.detailgrid{grid-template-columns:1fr}.actions{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <header><div class="head"><div><h1>PADOVA V2 · Purchasing</h1><div class="sub">Owner management · inventory staging</div></div><span class="tag">TEST ONLY — NOT LIVE</span></div></header>
+  <main>
+    <div class="warning"><b>Private V2 testing environment.</b> Purchases are administrative records. Only staff goods receipts affect physical stock. Nothing here changes the live PADOVA Terminal.</div>
+    <div class="grid">
+      <section class="card">
+        <h2 id="heading">New Purchase</h2>
+        <div id="editNotice" class="hidden">Editing an existing purchase. Correct the invoice, quantity, or matching and save changes.</div>
+        <label for="supplier">Supplier</label><input id="supplier" autocomplete="off" placeholder="Supplier name">
+        <label for="invoice">Supplier Invoice No.</label><input id="invoice" autocomplete="off" placeholder="As written on supplier document">
+        <label for="item">Item</label><select id="item"><option value="">Loading items…</option></select>
+        <label for="stockQty">Quantity (operational unit)</label>
+        <div class="row"><input id="stockQty" type="number" inputmode="decimal" step="any" min="0" placeholder="Number of goods"><span id="unit" class="unit">—</span></div>
+        <label for="unitCost">Unit Cost (Rp per supplier unit)</label><input id="unitCost" type="number" inputmode="decimal" min="0" step="any" placeholder="Leave blank if unknown">
+
+        <div class="section">
+          <h2>Match Goods Receipt</h2>
+          <div id="matchHint" class="hint">Enter the supplier invoice number and select an item to find receipts.</div>
+          <div id="receiptOptions"></div>
+          <div id="quantityNotice" class="muted" style="margin-top:9px"></div>
+          <label class="toggle" for="showAll"><input type="checkbox" id="showAll"> Show other unmatched receipts (manual override)</label>
+        </div>
+        <details id="details"><summary>Supplier invoice details / other units</summary>
+          <p class="muted">For example, staff record Dacron in balls while a supplier invoices in kilograms. Leave these blank when the units and quantities are the same.</p>
+          <div class="detailgrid">
+            <div><label for="supplierQty">Supplier invoice quantity</label><input type="number" id="supplierQty" inputmode="decimal" step="any" min="0" placeholder="Optional"></div>
+            <div><label for="supplierUnit">Supplier invoice unit</label><input id="supplierUnit" placeholder="e.g. kg (optional)"></div>
+            <div><label for="invoiceDate">Invoice date</label><input id="invoiceDate" type="date"></div>
+            <div><label for="amountOverride">Invoice amount (override)</label><input id="amountOverride" type="number" inputmode="decimal" step="any" min="0" placeholder="Optional Rp"></div>
+          </div>
+          <label for="notes">Notes</label><textarea id="notes" rows="2" placeholder="Optional management note"></textarea>
+        </details>
+        <div class="actions"><button id="save" class="primary">SAVE PURCHASE</button><button id="new">NEW PURCHASE / CANCEL EDIT</button></div>
+        <div id="status" class="status hidden" role="status"></div>
+        <div id="pending" class="retry hidden"><strong>Save confirmation uncertain</strong><p>Retry using the same transaction ID to prevent duplicate purchases.</p><button id="retry">RETRY SAVE</button><button id="cancelPending">CLEAR PENDING SAVE</button></div>
+      </section>
+      <section>
+        <div class="card"><h2>Unmatched Goods Receipts</h2><p class="muted">Available quantities are net of corrections and allocations to purchases.</p><div id="unmatched"></div></div>
+        <div class="card"><h2>Purchasing History</h2><p class="muted">Edit an existing invoice here. Saving an edit never adds stock.</p><div id="history"></div></div>
+      </section>
+    </div>
+  </main>
+  <script>
+  (()=>{
+    'use strict';
+    const $=id=>document.getElementById(id);
+    const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const ref=s=>String(s||'').trim().replace(/^'(?=[=+\-@])/,'').toUpperCase();
+    const KEY='padova-v2-owner-pending-v1';
+    let state={items:[],receipts:[],purchases:[]},editingId=null,manual=false,picked=new Set(),busy=false;
+    let pending;try{pending=JSON.parse(sessionStorage.getItem(KEY)||'null')}catch{pending=null}
+    function notify(message,type='ok'){$('status').textContent=message;$('status').className='status'+(type==='ok'?'':' '+type)}
+    function rpc(body){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).v2OwnerApi(body))}
+    function current(){return state.purchases.find(p=>p.id===editingId)}
+    function item(){return state.items.find(i=>i.code===$('item').value)}
+    function ownQty(id){return current()?.allocations?.find(a=>a.receiptId===id)?.qty||0}
+    function possible(r){return Math.max(0,Number(r.availableQty||0)+ownQty(r.id))}
+    function qtySelected(){return [...picked].reduce((n,id)=>{const r=state.receipts.find(x=>x.id===id);return n+(r?possible(r):0)},0)}
+    function commonRef(){const refs=[...picked].map(id=>state.receipts.find(r=>r.id===id)?.supplierDoc?.trim()).filter(Boolean);return refs.length===picked.size&&new Set(refs.map(ref)).size===1?refs[0]:null}
+    function showBusy(){
+      const disabled=busy||!!pending;
+      document.querySelectorAll('input,select,textarea').forEach(e=>e.disabled=disabled);
+      $('save').disabled=disabled||!state.items.length;
+      $('new').disabled=disabled;
+      $('retry').disabled=busy;$('cancelPending').disabled=busy;
+      $('pending').classList.toggle('hidden',!pending);
+    }
+    function reset(){
+      editingId=null;manual=false;picked.clear();
+      ['supplier','invoice','stockQty','unitCost','supplierQty','supplierUnit','invoiceDate','amountOverride','notes'].forEach(id=>$(id).value='');
+      $('item').value='';$('showAll').checked=false;$('details').open=false;
+      $('heading').textContent='New Purchase';$('editNotice').classList.add('hidden');$('save').textContent='SAVE PURCHASE';
+      render();
+    }
+    function edit(id){
+      const p=state.purchases.find(x=>x.id===id);if(!p||pending)return;
+      editingId=id;manual=p.mode==='MANUAL';picked=new Set((p.allocations||[]).map(a=>a.receiptId));
+      $('supplier').value=p.supplier;$('invoice').value=p.invoice;$('item').value=p.itemCode;$('stockQty').value=p.stockQty;
+      $('unitCost').value=p.unitCost===''?'':p.unitCost;
+      $('supplierQty').value=p.supplierQty===p.stockQty&&p.supplierUnit===p.stockUnit?'':p.supplierQty;
+      $('supplierUnit').value=p.supplierUnit===p.stockUnit?'':p.supplierUnit;
+      $('invoiceDate').value=/^\d{4}-\d{2}-\d{2}$/.test(p.invoiceDate)?p.invoiceDate:'';
+      $('amountOverride').value='';$('notes').value=p.notes||'';
+      $('details').open=!!($('supplierQty').value||$('supplierUnit').value||$('notes').value);
+      $('heading').textContent='Edit Purchase';$('editNotice').classList.remove('hidden');$('save').textContent='SAVE CHANGES';
+      render();$('heading').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+    function useReceipt(id){
+      const r=state.receipts.find(x=>x.id===id);if(!r||pending)return;
+      reset();editingId=null;manual=true;picked=new Set([id]);
+      $('item').value=r.itemCode;$('invoice').value=r.supplierDoc;$('stockQty').value=possible(r);
+      $('heading').textContent='New Purchase';$('editNotice').classList.add('hidden');$('save').textContent='SAVE PURCHASE';
+      render();$('heading').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+    function reconcileQuantity(){
+      const quantity=Number($('stockQty').value||0);
+      const selected=manual?qtySelected():state.receipts.filter(r=>r.itemCode===$('item').value&&ref(r.supplierDoc)===ref($('invoice').value)).reduce((n,r)=>n+possible(r),0);
+      $('quantityNotice').textContent=selected&&quantity&&selected!==quantity?`Receipt quantity ${selected} ${item()?.unit||''}; purchasing quantity ${quantity}. Difference: ${Math.abs(selected-quantity)}. This will be marked partially matched.`:'';
+    }
+    function render(){
+      const selected=$('item').value;
+      $('item').innerHTML='<option value="">Select item…</option>'+state.items.map(i=>`<option value="${esc(i.code)}">${esc(i.name)} (${esc(i.code)})</option>`).join('');
+      $('item').value=state.items.some(i=>i.code===selected)?selected:'';
+      $('unit').textContent=item()?.unit||'—';
+      const doc=ref($('invoice').value),code=$('item').value;
+      const matching=state.receipts.filter(r=>r.itemCode===code&&possible(r)>0&&doc&&ref(r.supplierDoc)===doc);
+      const candidates=state.receipts.filter(r=>r.itemCode===code&&possible(r)>0&&($('showAll').checked||(doc&&ref(r.supplierDoc)===doc)||picked.has(r.id)));
+      const hint=manual&&picked.size?`${picked.size} receipt(s) selected manually. The invoice reference and operational quantity were filled from your selection; you may override them.`:matching.length?`${matching.length} receipt(s) found for this invoice. Matching is automatic on save; tick receipts only to choose manually.`:'No receipt found under this invoice. You can save as Pending Matching, or show other receipts for manual matching.';
+      $('matchHint').textContent=code&&doc?hint:'Enter supplier invoice number and select an item to find receipts.';
+      $('matchHint').className='hint'+(code&&doc&&!matching.length&&!(manual&&picked.size)?' warn':'');
+      $('receiptOptions').innerHTML=candidates.map(r=>`<label class="receipt"><input class="pick" type="checkbox" data-id="${esc(r.id)}" ${picked.has(r.id)?'checked':''}><span><strong>${esc(state.items.find(i=>i.code===r.itemCode)?.name||r.itemCode)} · ${esc(r.supplierDoc||'No reference')}</strong><small>Received by ${esc(r.recordedBy||'staff')} · ${r.netQty} ${esc(r.unit)} net received</small></span><span class="right">${possible(r)} ${esc(r.unit)}</span></label>`).join('');
+      document.querySelectorAll('.pick').forEach(box=>box.onchange=()=>{
+        manual=true;box.checked?picked.add(box.dataset.id):picked.delete(box.dataset.id);
+        $('stockQty').value=picked.size?qtySelected():'';
+        const common=commonRef();if(common)$('invoice').value=common;
+        render();
+      });
+      reconcileQuantity();
+      const unmatched=state.receipts.filter(r=>r.availableQty>0);
+      $('unmatched').innerHTML=unmatched.length?unmatched.map(r=>`<div class="line"><span><b>${esc(state.items.find(i=>i.code===r.itemCode)?.name||r.itemCode)}</b><small>${esc(r.supplierDoc||'No reference')} · ${r.availableQty} ${esc(r.unit)} available</small></span><button data-use="${esc(r.id)}">Use</button></div>`).join(''):'<p class="muted">No unmatched receipts.</p>';
+      document.querySelectorAll('[data-use]').forEach(b=>b.onclick=()=>useReceipt(b.dataset.use));
+      $('history').innerHTML=state.purchases.length?[...state.purchases].reverse().map(p=>`<div class="line"><span><b>${esc(p.invoice)}</b><small>${esc(p.supplier)} · ${esc(state.items.find(i=>i.code===p.itemCode)?.name||p.itemCode)} · ${p.stockQty} ${esc(p.stockUnit)}</small><small>Matched: ${p.matchedQty} · ${p.invoiceAmount===''?'Cost pending':'Rp '+Number(p.invoiceAmount).toLocaleString('id-ID')}</small><span class="pill ${p.status==='MATCHED'?'matched':p.status==='PARTIALLY MATCHED'?'partial':''}">${esc(p.status)}</span></span><button data-edit="${esc(p.id)}">Edit</button></div>`).join(''):'<p class="muted">No purchasing records yet.</p>';
+      document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>edit(b.dataset.edit));
+      showBusy();
+    }
+    async function refresh(){
+      try{busy=true;showBusy();const result=await rpc({action:'snapshot'});if(!result?.ok)throw Error(result?.message||'Could not load owner data');state=result;render();if(!pending)notify('Connected to V2 sandbox. Purchasing entries never change stock.');}
+      catch(e){notify(e.message||String(e),'bad')}
+      finally{busy=false;render();}
+    }
+    function payload(){
+      return {action:'savePurchase',requestId:crypto.randomUUID(),purchaseId:editingId||'',supplier:$('supplier').value.trim(),invoice:$('invoice').value.trim(),invoiceDate:$('invoiceDate').value,
+        itemCode:$('item').value,stockQty:$('stockQty').value,unitCost:$('unitCost').value,supplierQty:$('supplierQty').value,supplierUnit:$('supplierUnit').value.trim(),
+        amountOverride:$('amountOverride').value,notes:$('notes').value.trim(),manualOverride:manual,receiptIds:manual?[...picked]:[]};
+    }
+    async function send(){
+      if(!pending)return;
+      try{busy=true;showBusy();const response=await rpc(pending);
+        if(response?.ok===false){pending=null;sessionStorage.removeItem(KEY);notify(`Not saved: ${response.message||'Please review the details'}`,'bad');return;}
+        if(!response?.ok)throw Error('The server did not confirm the save');
+        const saved=response.purchases.find(p=>p.id===response.purchaseId);
+        pending=null;sessionStorage.removeItem(KEY);state=response;reset();
+        notify(`Saved invoice ${saved?.invoice||''}: ${saved?.status||'Recorded'}. Stock unchanged.${response.duplicate?' Existing request recognized; no duplicate entry.':''}\nReady for the next purchase.`);
+      }catch(e){notify(`Save result uncertain: ${e.message||String(e)}. Check purchasing history or use RETRY SAVE with the same request ID.`,'warn')}
+      finally{busy=false;render();}
+    }
+    $('save').onclick=()=>{try{if(pending)throw Error('Resolve the previous pending save first');pending=payload();sessionStorage.setItem(KEY,JSON.stringify(pending));render();send()}catch(e){notify(e.message||String(e),'bad')}};
+    $('retry').onclick=send;
+    $('cancelPending').onclick=()=>{if(!pending)return;if(!confirm('Clear this pending save? Check Purchasing History first so you do not enter the same invoice twice.'))return;pending=null;sessionStorage.removeItem(KEY);render();notify('Pending request cleared. Review purchasing history before saving again.','warn')};
+    $('new').onclick=()=>{if(!pending){reset();notify('Ready for a new purchase.')}};
+    $('item').onchange=()=>{manual=false;picked.clear();render()};
+    $('invoice').oninput=()=>{manual=false;picked.clear();if(!$('stockQty').value){const matches=state.receipts.filter(r=>r.itemCode===$('item').value&&ref(r.supplierDoc)===ref($('invoice').value));if(matches.length)$('stockQty').value=matches.reduce((n,r)=>n+possible(r),0)}render()};
+    $('showAll').onchange=render;$('stockQty').oninput=reconcileQuantity;
+    if(pending)notify('There is a pending purchase save. Use RETRY SAVE to check whether it was recorded.','warn');
+    refresh();
+  })();
+  </script>
+</body>
+</html>
