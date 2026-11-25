@@ -73,6 +73,17 @@ assert.equal(context.v2StaffApi({deviceToken:token,action:'stockIn',itemCode:'HC
 assert.equal(context.v2StaffApi({deviceToken:token,action:'stockOut',itemCode:'HCSSP01',qty:2,staffId:'STAFF',supplierDoc:'=FORMULA',requestId:'api-out'}).stockAfter,8);
 assert.equal(context.v2StaffApi({deviceToken:token,action:'stockOut',itemCode:'HCSSP01',qty:2,staffId:'STAFF',requestId:'material-out'}).stockAfter,6);
 assert.match(context.v2StaffApi({deviceToken:token,action:'stockOut',itemCode:'HCSSP01',qty:1,staffId:'STAFF',requestId:'material-out'}).message,/different stock transaction/);
+// MASUK without supplier reference is a capped correction of material taken
+// today, never a receipt that would be available for purchase matching.
+const receiptsBeforeMaterialFix=sheets['Goods Receipts'].rows.length;
+const materialFix=context.v2StaffApi({deviceToken:token,action:'stockIn',itemCode:'HCSSP01',qty:1,staffId:'STAFF',requestId:'material-usage-fix'});
+assert.equal(materialFix.ok,true);
+assert.equal(materialFix.stockAfter,7);
+assert.equal(materialFix.movementType,'MATERIAL_ISSUE_CORRECTION_IN');
+assert.equal(sheets['Goods Receipts'].rows.length,receiptsBeforeMaterialFix);
+assert.equal(context.v2StaffApi({deviceToken:token,action:'itemLookup',itemCode:'HCSSP01',deviceToken:token}).todayQty,1);
+assert.equal(context.v2StaffApi({deviceToken:token,action:'stockIn',itemCode:'HCSSP01',qty:1,staffId:'STAFF',requestId:'material-usage-fix'}).duplicate,true);
+assert.match(context.v2StaffApi({deviceToken:token,action:'stockIn',itemCode:'HCSSP01',qty:2,staffId:'STAFF',requestId:'over-material-fix'}).message,/correction exceeds usage recorded today/);
 
 // Owner purchase matching: one source of stock, multiple administrative edits.
 const physical=context.v2StaffApi({action:'stockIn',itemCode:'HCSSP01',qty:20,staffId:'STAFF',supplierDoc:'SUP-888',requestId:'test-purchase-in',deviceToken:token});
@@ -113,7 +124,7 @@ assert.equal(context.v2OwnerApi({...purchaseInput,requestId:'owner-new-2',invoic
 assert.throws(()=>context.v2StockOut_({itemCode:'HCSSP01',qty:1,staffId:'STAFF',supplierDoc:'SUP-888',requestId:'bad-reverse'}),/No sufficient unmatched/);
 const purchaseRow=sheets['Purchasing'].rows[1];
 assert.equal(purchaseRow[5],300);assert.equal(purchaseRow[6],'kg');assert.equal(purchaseRow[7],20);assert.equal(purchaseRow[8],'ball');
-assert.equal(sheets['Stock Movements'].rows.length,7); // purchasing made no movements
+assert.equal(sheets['Stock Movements'].rows.length,8); // purchasing made no movements
 // Pre-V2 seed purchasing rows with Goods Receipt ID but no link ledger must
 // remain allocated, and a staff correction cannot reverse matched goods.
 const legacyReceipt=context.v2Receive_({itemCode:'HCSSP01',qty:3,staffId:'STAFF',supplierDoc:'LEGACY-INV',requestId:'legacy-receipt'});
@@ -144,7 +155,7 @@ assert.equal(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:6,s
 assert.equal(context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',deviceToken:token}).todayQty,6);
 assert.match(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:1.5,staffId:'STAFF',requestId:'fraction',deviceToken:token}).message,/whole units/);
 assert.match(context.v2StaffApi({action:'stockIn',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',supplierDoc:'SUP-123',requestId:'bad-finished-doc',deviceToken:token}).message,/does not use a supplier/);
-assert.match(context.v2StaffApi({action:'stockIn',itemCode:'HCSSP01',qty:1,staffId:'STAFF',requestId:'no-raw-doc',deviceToken:token}).message,/Supplier invoice or sales order/);
+assert.match(context.v2StaffApi({action:'stockIn',itemCode:'HCSSP01',qty:2,staffId:'STAFF',requestId:'no-raw-doc',deviceToken:token}).message,/Supplier invoice or sales order/);
 const correctedFinish=context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',requestId:'daily-finished-fix',deviceToken:token});
 assert.equal(correctedFinish.ok,true);
 assert.equal(correctedFinish.stockAfter,8);
@@ -153,4 +164,4 @@ assert.equal(context.v2StaffApi({action:'itemLookup',itemCode:'TEST-PILLOW',devi
 assert.equal(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:2,staffId:'STAFF',requestId:'daily-finished-fix',deviceToken:token}).duplicate,true);
 assert.match(context.v2StaffApi({action:'stockOut',itemCode:'TEST-PILLOW',qty:5,staffId:'STAFF',requestId:'over-fix',deviceToken:token}).message,/exceeds finished goods recorded today/);
 assert.equal(sheets['Goods Receipts'].rows.length,receiptsBefore);
-console.log('PASS: staff receipts/reversals, owner matching, production receipts/corrections, idempotency, and no double stock');
+console.log('PASS: staff receipts/reversals, owner matching, daily materials + correction, finished production + correction, idempotency, and no double stock');
