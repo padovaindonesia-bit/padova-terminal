@@ -3,13 +3,14 @@ const KEY='padova-v2-demo-v1';const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state;try{const x=JSON.parse(localStorage.getItem(KEY));state=x?.items&&x?.receipts&&x?.purchases&&x?.movements?x:initialState()}catch{state=initialState()}
 let editingId=null;
+let manualMatchOverride=false;
 const itemName=code=>state.items.find(x=>x.code===code)?.name??code;
 const options=()=>state.items.map(i=>`<option value="${esc(i.code)}">${esc(i.name)} (${esc(i.code)})</option>`).join('');
 function persist(){localStorage.setItem(KEY,JSON.stringify(state));draw();}
 function message(id,s,bad=false){const e=$(id);e.textContent=s;e.style.display='block';e.className='status'+(bad?' bad':'');}
 function showStaff(show){$('staff').style.display=show?'block':'none';$('owner').style.display=show?'none':'block';$('staffTab').className=show?'active':'';$('ownerTab').className=show?'':'active';draw();}
-function editPurchase(id){const p=state.purchases.find(x=>x.id===id);if(!p)return;editingId=id;$('supplier').value=p.supplier;$('invoice').value=p.invoice;$('purchaseItem').value=p.itemCode;$('invoiceQty').value=p.invoiceQty;$('unitCost').value=p.unitCost;draw();$('purchaseHeading').textContent='Edit Purchase';$('editNotice').style.display='block';$('purchaseButton').textContent='SAVE CHANGES';$('purchaseHeading').scrollIntoView({behavior:'smooth'});}
-function newPurchase(){editingId=null;$('purchaseHeading').textContent='New Purchase';$('editNotice').style.display='none';$('purchaseButton').textContent='SAVE PURCHASE';$('supplier').value='DEMO SUPPLIER';$('invoice').value='';$('invoiceQty').value='';$('unitCost').value='';$('showAllReceipts').checked=false;draw();}
+function editPurchase(id){const p=state.purchases.find(x=>x.id===id);if(!p)return;editingId=id;manualMatchOverride=false;$('supplier').value=p.supplier;$('invoice').value=p.invoice;$('purchaseItem').value=p.itemCode;$('invoiceQty').value=p.invoiceQty;$('unitCost').value=p.unitCost;draw();$('purchaseHeading').textContent='Edit Purchase';$('editNotice').style.display='block';$('purchaseButton').textContent='SAVE CHANGES';$('purchaseHeading').scrollIntoView({behavior:'smooth'});}
+function newPurchase(){editingId=null;manualMatchOverride=false;$('purchaseHeading').textContent='New Purchase';$('editNotice').style.display='none';$('purchaseButton').textContent='SAVE PURCHASE';$('supplier').value='DEMO SUPPLIER';$('invoice').value='';$('invoiceQty').value='';$('unitCost').value='';$('showAllReceipts').checked=false;draw();}
 function checkedReceiptIds(){return [...document.querySelectorAll('.receiptPick:checked')].map(x=>x.dataset.id);}
 function refreshQuantityRelation(){
  const ids=checkedReceiptIds();
@@ -19,6 +20,7 @@ function refreshQuantityRelation(){
  $('matchQuantityNotice').textContent=relation;
 }
 function syncQuantityFromCheckedReceipts(){
+ manualMatchOverride=true;
  const ids=checkedReceiptIds();
  $('invoiceQty').value=ids.length?selectedReceiptQuantity(state,ids,editingId):'';
  const ref=commonSupplierReference(state,ids);
@@ -41,7 +43,7 @@ function draw(){
  const doc=$('invoice').value.trim().toUpperCase();
  const candidates=state.receipts.filter(r=>r.itemCode===$('purchaseItem').value&&(unmatchedQty(state,r.id)>0||current.some(a=>a.receiptId===r.id))&&($('showAllReceipts').checked||(doc&&String(r.supplierDoc||'').trim().toUpperCase()===doc)||current.some(a=>a.receiptId===r.id)));
  const suggested=candidates.filter(r=>doc&&String(r.supplierDoc||'').trim().toUpperCase()===doc);
- $('matchHint').textContent=suggested.length?`${suggested.length} receipt(s) found under this invoice number. Confirm by checking the box.`:'No matching receipt found under this invoice number. You may still save as Pending Matching or show other receipts.';
+ $('matchHint').textContent=suggested.length?`${suggested.length} receipt(s) found under this invoice number. Saving will reconcile automatically; use the checkbox to override manually.`:'No matching receipt found under this invoice number. You may still save as Pending Matching or show other receipts.';
  $('receiptOptions').innerHTML=candidates.map(r=>{const prev=current.find(a=>a.receiptId===r.id)?.qty??0;const max=unmatchedQty(state,r.id)+prev;const match=doc&&String(r.supplierDoc||'').trim().toUpperCase()===doc;return `<label class="receipt"><input type="checkbox" class="receiptPick" data-id="${esc(r.id)}" ${prev?'checked':''}> <b>${esc(itemName(r.itemCode))} — ${max} ${esc(state.items.find(i=>i.code===r.itemCode)?.unit)} available</b><small>Supplier ref: ${esc(r.supplierDoc||'none')} ${match?'· Suggested match':'· Manual match'}</small></label>`}).join('');
  document.querySelectorAll('.receiptPick').forEach(box=>box.onchange=syncQuantityFromCheckedReceipts);
  const quantity=Number($('invoiceQty').value);
@@ -51,12 +53,12 @@ function draw(){
 }
 function selectedAllocations(){let remaining=Number($('invoiceQty').value);const existing=state.purchases.find(p=>p.id===editingId);return [...document.querySelectorAll('.receiptPick:checked')].map(e=>{const prev=existing?.receiptAllocations?.find(a=>a.receiptId===e.dataset.id)?.qty??0;const qty=Math.max(0,Math.min(remaining,unmatchedQty(state,e.dataset.id)+prev));remaining-=qty;return {receiptId:e.dataset.id,qty}}).filter(x=>x.qty>0);}
 $('staffTab').onclick=()=>showStaff(true);$('ownerTab').onclick=()=>showStaff(false);$('stockItem').onchange=draw;$('purchaseItem').onchange=()=>{if(editingId){const p=state.purchases.find(x=>x.id===editingId);if(p&&p.itemCode!==$('purchaseItem').value)message('purchaseStatus','Changing items removes previous allocations; review before saving.',true)}draw()};
-$('invoice').oninput=draw;$('showAllReceipts').onchange=draw;$('invoiceQty').oninput=refreshQuantityRelation;
+$('invoice').oninput=()=>{manualMatchOverride=false;draw()};$('showAllReceipts').onchange=draw;$('invoiceQty').oninput=refreshQuantityRelation;
 document.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{$('stockQty').value=Math.max(0,(Number($('stockQty').value)||0)+Number(b.dataset.qty));});
 $('clearQty').onclick=()=>{$('stockQty').value='';$('stockQty').focus()};$('stockQty').onclick=e=>e.target.select();
 $('inButton').onclick=()=>{try{const r=receiveGoods(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,supplierDoc:$('supplierDoc').value.trim(),requestId:crypto.randomUUID()});persist();message('stockStatus',`Received ${r.receipt.qty}. Reference: ${r.receipt.supplierDoc||'not provided'}. Stock is now ${balance(state,r.receipt.itemCode)}.`)}catch(e){message('stockStatus',e.message,true)}};
 $('outButton').onclick=()=>{try{postMovement(state,{itemCode:$('stockItem').value,qty:$('stockQty').value,staff:$('staffName').value,type:'MATERIAL_ISSUE',requestId:crypto.randomUUID()});persist();message('stockStatus',`Materials taken. Stock is now ${balance(state,$('stockItem').value)}.`)}catch(e){message('stockStatus',e.message,true)}};
-$('purchaseButton').onclick=()=>{try{const p=savePurchase(state,{id:editingId,invoice:$('invoice').value.trim(),supplier:$('supplier').value.trim(),itemCode:$('purchaseItem').value,invoiceQty:$('invoiceQty').value,unitCost:$('unitCost').value,receiptAllocations:selectedAllocations()});persist();editPurchase(p.id);message('purchaseStatus',`Saved: ${p.status}. Stock unchanged.`)}catch(e){message('purchaseStatus',e.message,true)}};
+$('purchaseButton').onclick=()=>{try{const p=savePurchase(state,{id:editingId,invoice:$('invoice').value.trim(),supplier:$('supplier').value.trim(),itemCode:$('purchaseItem').value,invoiceQty:$('invoiceQty').value,unitCost:$('unitCost').value,receiptAllocations:selectedAllocations(),autoMatch:!manualMatchOverride});persist();editPurchase(p.id);message('purchaseStatus',`Saved: ${p.status}. Stock unchanged.`)}catch(e){message('purchaseStatus',e.message,true)}};
 $('newPurchase').onclick=newPurchase;
 $('resetButton').onclick=()=>{if(confirm('Clear this browser\'s V2 demo data?')){state=initialState();editingId=null;persist();newPurchase();message('stockStatus','Demo reset.')}};
 $('stockItem').innerHTML=options();$('purchaseItem').innerHTML=options();draw();
