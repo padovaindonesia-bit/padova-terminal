@@ -47,4 +47,19 @@ const refC=receiveGoods(st5,{itemCode:'HCSSP01',qty:5,supplierDoc:'INV-88',reque
 assert.equal(commonSupplierReference(st5,[refA.receipt.id,refB.receipt.id]),'INV-77');
 assert.equal(commonSupplierReference(st5,[refA.receipt.id,refC.receipt.id]),null);
 assert.equal(suggestedReceipts(st5,{invoice:'INV-77',itemCode:'HCSSP01'}).length,2);
+// User's exact regression: wrong supplier invoice saved without checking a receipt;
+// edit the same purchase to correct the invoice number and save without a checkbox.
+const st6=initialState();
+const realReceipt=receiveGoods(st6,{itemCode:'HCSSP01',qty:20,supplierDoc:'TRUE-INV',requestId:'real-1'});
+const badInvoice=savePurchase(st6,{supplier:'Supplier A',invoice:'WRONG-INV',itemCode:'HCSSP01',invoiceQty:20,unitCost:100,autoMatch:true});
+assert.equal(badInvoice.status,'PENDING MATCHING');
+const corrected=savePurchase(st6,{id:badInvoice.id,supplier:'Supplier A',invoice:'TRUE-INV',itemCode:'HCSSP01',invoiceQty:20,unitCost:100,autoMatch:true});
+assert.equal(corrected.status,'MATCHED');
+assert.equal(corrected.receiptAllocations[0].receiptId,realReceipt.receipt.id);
+assert.equal(st6.purchases.length,1);assert.equal(balance(st6,'HCSSP01'),28);
+// Explicit manual override may still leave a purchase unmatched.
+const st7=initialState();
+receiveGoods(st7,{itemCode:'HCSSP01',qty:20,supplierDoc:'INV-7',requestId:'real-7'});
+const manual=savePurchase(st7,{supplier:'Supplier A',invoice:'INV-7',itemCode:'HCSSP01',invoiceQty:20,unitCost:100,autoMatch:false});
+assert.equal(manual.status,'PENDING MATCHING');
 console.log('PASS: receipt, duplicate prevention, purchasing no stock impact, edit partial match, physical correction, and guardrails');
